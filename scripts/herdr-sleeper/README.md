@@ -44,7 +44,7 @@ crash-recovery snapshot, `events.jsonl`, `sleeper.log`, `lock`).
 ## Safety rules (all fail closed)
 
 Borrowed from Orca's agent-hibernation implementation and its bug history,
-then hardened by two rounds of multi-model code review.
+then hardened by three rounds of review across five models (60 findings).
 
 1. Eligible only when: agent kind `claude` with a session id and an
    on-disk transcript (newest copy wins); Herdr status `idle`/`done`;
@@ -52,28 +52,38 @@ then hardened by two rounds of multi-model code review.
    pane; transcript older than the window; composer *positively* empty
    (draft, unreadable screen, missing prompt glyph → refuse); original
    argv safely replayable (`--fork-session`, `--print`, `--session-id`,
-   positional prompts, anything after `--` → refuse).
-2. Everything is re-checked immediately before `/exit`, including that
-   `state_change_seq` and the session id have not moved since the scan.
+   positional prompts, anything after `--`, options of unknown arity →
+   refuse).
+2. Everything is re-checked after the journal write and immediately before
+   `/exit`, including that `state_change_seq` and the session id have not
+   moved; `/exit` targets the pane id, never the name (names get
+   reassigned); "exited" needs Herdr to drop the agent *and* process-info
+   to show no `claude` — unreadable process-info is unknown, not gone.
 3. The record is written *before* `/exit`. If the agent is still there
    after the wait it stays as `exit-requested`; the next scan reconciles
-   (dropped only if the process is really present, `asleep` if it left).
+   (dropped only after two consecutive sightings with a real process, or
+   when the pane runs a different session; `asleep` once verifiably gone).
    A record is never deleted because its pane vanished — the manual
    resume command is printed instead. Every scan merges
    pane→session→argv into `panes.json`; `wake` recovers from it and
    persists the recovered entry before trying.
-4. Wake refuses if the session id is live in any pane or any real
-   `claude` process (`--resume <id>` / `--resume=<id>`, direct or
-   node-launched) and refuses when that cannot be verified. Recovered
-   argv goes through the same replay filter.
-5. A non-object state file, malformed TOML, unknown keys, or a
-   `nan`/negative/`inf` window (config, env or CLI) aborts `scan`/`install`
+4. Wake refuses if the session id is live in any pane or any process that
+   selects it (`--resume <id>`/`--resume=<id>`, direct or `node …/cli.js`),
+   if a `claude --continue` runs in the same cwd, when that cannot be
+   verified, or when the pane's cwd no longer matches the record (recycled
+   pane id). Recovered argv goes through the same replay filter; recovery
+   needs the pane to exist, hold no agent, and match the snapshot's cwd.
+5. A non-object state file, malformed TOML, unknown keys, booleans where
+   numbers go, conflicting env aliases, or a `nan`/negative/`inf` window
+   (config, env or CLI) aborts `scan`/`install`
    — `wake`/`list`/`log` keep working. A file lock serialises overlapping
    runs; the journal is re-read under it before every write.
 6. `install` builds the plist with `plistlib`, runs the same interpreter,
-   and carries `HERDR_SLEEPER_*`/`XDG_CONFIG_HOME` from the installing
-   shell; the cron fallback does the same and refuses intervals cron cannot
-   express exactly.
+   pins the absolute `herdr` it resolved and puts its directory first on
+   PATH, carries `HERDR_SLEEPER_*`/`XDG_CONFIG_HOME` from the installing
+   shell, and restores the previous job if bootstrap fails; the cron
+   fallback does the same and refuses intervals cron cannot express
+   exactly. CLI `--exclude` adds to the config's excludes.
 
 Known limits: a window remains between the last recheck and Claude
 consuming `/exit` — only a native Herdr operation can close it (below);
@@ -94,6 +104,6 @@ Claude only, for the reason above.
 
 ## Tests
 
-`uv run --with pytest python -m pytest scripts/herdr-sleeper -q` — 51 tests
+`uv run --with pytest python -m pytest scripts/herdr-sleeper -q` — 61 tests
 covering the decision logic and the sleep/wake state machine against a
 fake `herdr`.
