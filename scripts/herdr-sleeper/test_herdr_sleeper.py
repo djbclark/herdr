@@ -1,4 +1,4 @@
-"""Unit tests for bin/herdr-sleeper: pure decision logic plus the sleep/wake state machine
+"""Unit tests for herdr-sleeper: pure decision logic plus the sleep/wake state machine
 against a fake `herdr` (no Herdr, no Claude needed)."""
 
 from __future__ import annotations
@@ -75,6 +75,7 @@ class FakeHerdr:
         self.exit_leaves_agent = True     # /exit removes the agent from its pane
         self.start_uuid: str | None = None  # what agent start reports; None → the requested --resume uuid
         self.process_info_broken = False    # process-info returns an error envelope
+        self.process_override: bool | None = None  # force process presence regardless of agent registration
 
     def __call__(self, *args: str, check: bool = True, timeout: float = 0) -> dict[str, Any]:
         self.calls.append(args)
@@ -97,7 +98,8 @@ class FakeHerdr:
             a = by_pane.get(pane)
             if self.process_info_broken:
                 return {}
-            procs = [{"argv0": "claude", "name": "claude", "argv": ["claude", *self.argv], "pid": 1}] if a and a.get("agent") else []
+            present = (a is not None and bool(a.get("agent"))) if self.process_override is None else self.process_override
+            procs = [{"argv0": "claude", "name": "claude", "argv": ["claude", *self.argv], "pid": 1}] if present else []
             return {"process_info": {"foreground_processes": procs}}
         if args[:2] == ("agent", "prompt") and args[3] == "/exit":
             if self.exit_leaves_agent:
@@ -379,11 +381,22 @@ def test_exit_timeout_keeps_handle_as_exit_requested(fake: FakeHerdr) -> None:
     assert events() == ["exit-uncertain"]
 
 
-def test_exit_with_unreadable_process_info_stays_uncertain(fake: FakeHerdr) -> None:
-    fake.process_info_broken = True  # Herdr drops the agent but we cannot see the process go
-    fake.argv_cache = fake.argv
+def test_exit_with_unreadable_process_info_stays_uncertain(fake: FakeHerdr, monkeypatch: pytest.MonkeyPatch) -> None:
+    # process-info works until /exit is sent, then becomes unreadable: Herdr drops the agent but we
+    # cannot positively see the process go -> exit-requested, no pane run, handle kept
+    real_prompt = fake.__call__
+
+    def flaky(*args: str, **kw: Any) -> dict[str, Any]:
+        out = real_prompt(*args, **kw)
+        if args[:2] == ("agent", "prompt"):
+            fake.process_info_broken = True
+        return out
+
+    monkeypatch.setattr(sleeper, "herdr", flaky)
     slept, outcome = sleeper.sleep_agent(agent(), 12, set(), dry_run=False)
-    assert not slept and "could not read claude argv" in outcome  # refused before acting, since argv is unknown
+    assert not slept and "uncertain" in outcome
+    assert journal()["w1:p1"]["phase"] == "exit-requested"
+    assert not any(c[:2] == ("pane", "run") for c in fake.calls)
 
 
 def test_reconcile_settles_exit_requested(fake: FakeHerdr) -> None:
@@ -444,8 +457,18 @@ def test_wake_filters_snapshot_argv(fake: FakeHerdr) -> None:
 def test_read_json_rejects_non_object_root(state: Path) -> None:
     sleeper.STATE_DIR.mkdir(parents=True)
     sleeper.JOURNAL.write_text("[]\n")
-    with pytest.raises(sleeper.SleeperError):
+    with pytest.raises(sleeper.DamagedState):
         sleeper.read_json(sleeper.JOURNAL)
+
+
+def test_wake_quarantines_damaged_journal_before_snapshot_recovery(fake: FakeHerdr, capsys: pytest.CaptureFixture[str]) -> None:
+    sleeper.merge_snapshot(fake.agents)
+    fake.agents[0].pop("agent"); fake.agents[0].pop("agent_session")
+    sleeper.JOURNAL.write_text("[]\n")
+    assert sleeper.cmd_wake(types.SimpleNamespace(target="a", all=False)) == 0
+    damaged = list(sleeper.STATE_DIR.glob("sleeping.json.damaged-*"))
+    assert len(damaged) == 1 and damaged[0].read_text() == "[]\n"
+    assert "damaged journal moved to" in capsys.readouterr().out
 
 
 def test_cli_idle_hours_validated(state: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -457,12 +480,34 @@ def test_cli_idle_hours_validated(state: Path, monkeypatch: pytest.MonkeyPatch) 
         sleeper.main(["scan", "--idle", "soon"])
 
 
-def test_reconcile_needs_a_real_process_before_dropping(fake: FakeHerdr, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reconcile_needs_a_real_process_before_dropping(fake: FakeHerdr) -> None:
     fake.exit_leaves_agent = False
     sleeper.sleep_agent(agent(), 12, set(), dry_run=False)
-    monkeypatch.setattr(sleeper, "claude_argv", lambda pane: None)  # agent list says present, process-info says no
+    fake.process_override = False  # agent list says present, process-info says no process
+    sleeper.reconcile(fake.agents); sleeper.reconcile(fake.agents); sleeper.reconcile(fake.agents)
+    assert journal()["w1:p1"]["phase"] == "exit-requested" and "seen_running" not in journal()["w1:p1"]
+
+
+def test_reconcile_sightings_must_be_consecutive(fake: FakeHerdr) -> None:
+    fake.exit_leaves_agent = False
+    sleeper.sleep_agent(agent(), 12, set(), dry_run=False)
+    sleeper.reconcile(fake.agents)                      # True
+    fake.process_override = None; fake.process_info_broken = True
+    sleeper.reconcile(fake.agents)                      # unknown -> streak resets
+    fake.process_info_broken = False
+    sleeper.reconcile(fake.agents)                      # True again: only one in a row
+    assert "w1:p1" in journal()
+
+
+def test_displaced_session_survives_reconcile(fake: FakeHerdr) -> None:
+    entry = slept_entry(fake)
+    fake.start_uuid = "fresh-uuid"
+    assert not sleeper.wake_entry(entry)                # pane now runs fresh-uuid; entry kept with wake_got
+    sleeper.merge_snapshot(fake.agents)
     sleeper.reconcile(fake.agents)
-    assert journal()["w1:p1"]["phase"] == "exit-requested"
+    j = journal()["w1:p1"]
+    assert j["uuid"] == UUID and j["phase"] == "displaced" and j["argv"] == ["--dangerously-skip-permissions"]
+    assert not sleeper.wake_entry(j)                    # manual-only from here
 
 
 def test_wake_refuses_recycled_pane_by_cwd(fake: FakeHerdr) -> None:
@@ -555,12 +600,21 @@ def test_uuid_live_elsewhere_parses_ps(fake: FakeHerdr, monkeypatch: pytest.Monk
         f"  13 /bin/bash -c 'echo claude {UUID}'": None,       # a shell mentioning both is not a session
         f"  14 /usr/local/bin/claude --resume other": None,
         f"  15 node /opt/lib/node_modules/@anthropic-ai/claude-code/cli.js --resume {UUID}": "pid 15",
+        f"  16 node /opt/lib/node_modules/@anthropic-ai/claude-code/cli.js --continue": "pid 16 (claude --continue in /p)",
+        f"  17 claude -c": "pid 17 (claude --continue in /p)",
     }
     for line, expect in lines.items():
         monkeypatch.setattr(sleeper.subprocess, "run",
                             lambda *a, **k: types.SimpleNamespace(stdout=line + "\n", returncode=0))
         fake.agents = []
-        assert REAL_UUID_LIVE(UUID) == expect, line
+        monkeypatch.setattr(sleeper, "process_cwd", lambda pid: "/p")
+        assert REAL_UUID_LIVE(UUID, cwd="/p") == expect, line
+    # a --continue whose cwd cannot be inspected is unknown, not "verified nowhere"
+    monkeypatch.setattr(sleeper.subprocess, "run",
+                        lambda *a, **k: types.SimpleNamespace(stdout="  18 claude --continue\n", returncode=0))
+    monkeypatch.setattr(sleeper, "process_cwd", lambda pid: None)
+    with pytest.raises(sleeper.SleeperError):
+        REAL_UUID_LIVE(UUID, cwd="/p")
 
 
 # --------------------------------------------------------------- install

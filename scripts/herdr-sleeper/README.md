@@ -44,7 +44,9 @@ crash-recovery snapshot, `events.jsonl`, `sleeper.log`, `lock`).
 ## Safety rules (all fail closed)
 
 Borrowed from Orca's agent-hibernation implementation and its bug history,
-then hardened by three rounds of review across five models (60 findings).
+then hardened by three rounds of review across five models (60 findings),
+plus a fourth iteration from a week of live deployment (damaged-state
+quarantine, displaced-session handling, staged plist install).
 
 1. Eligible only when: agent kind `claude` with a session id and an
    on-disk transcript (newest copy wins); Herdr status `idle`/`done`;
@@ -104,6 +106,6 @@ Claude only, for the reason above.
 
 ## Tests
 
-`uv run --with pytest python -m pytest scripts/herdr-sleeper -q` — 61 tests
+`uv run --with pytest python -m pytest scripts/herdr-sleeper -q` — 64 tests
 covering the decision logic and the sleep/wake state machine against a
 fake `herdr`.
