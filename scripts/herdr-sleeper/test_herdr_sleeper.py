@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import plistlib
+import shlex
 import time
 import types
 from pathlib import Path
@@ -16,6 +17,7 @@ import pytest
 SCRIPT = Path(__file__).resolve().parent / "herdr-sleeper"
 sleeper = types.ModuleType("herdr_sleeper")
 exec(compile(SCRIPT.read_text(), str(SCRIPT), "exec"), sleeper.__dict__)
+sleeper.__file__ = str(SCRIPT)  # a real interpreter sets __file__; exec() does not
 
 UUID = "20603f77-21a6-4a16-9f2b-77a87efbc665"
 REAL_UUID_LIVE = sleeper.uuid_live_elsewhere  # captured before any fixture stubs it
@@ -336,6 +338,15 @@ def test_sleep_happy_path(fake: FakeHerdr) -> None:
     assert ("agent", "prompt", "w1:p1", "/exit") in fake.calls  # by pane id, never by (reassignable) name
     assert any(c[:2] == ("pane", "rename") and c[3].startswith("💤") for c in fake.calls)
     assert events() == ["slept"]
+
+
+def test_sleep_hint_prints_absolute_wake_command(fake: FakeHerdr) -> None:
+    # the hint must be runnable wherever it is pasted: launchd runs the script from a
+    # private directory, so a bare `herdr-sleeper` is only on PATH if someone installed it
+    slept, _ = sleeper.sleep_agent(agent(), 12, set(), dry_run=False)
+    assert slept
+    run = next(c for c in fake.calls if c[:2] == ("pane", "run"))
+    assert str(SCRIPT) in run[3] and f"{shlex.quote(str(SCRIPT))} wake a" in run[3]
 
 
 def test_sleep_refuses_on_draft_and_never_sends_exit(fake: FakeHerdr) -> None:

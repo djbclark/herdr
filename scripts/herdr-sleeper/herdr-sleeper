@@ -54,8 +54,9 @@ What "sleep" means here, and why it is safe:
    live in any pane or `claude` process, or if that cannot be determined.
 6. **The pane advertises how to wake itself.** After exit we reset terminal
    modes (a dead TUI can leave the shell receiving mouse packets), print a
-   `💤 … wake: herdr-sleeper wake <name>` line into the pane and prefix the
-   pane label with 💤.
+   `💤 … wake: <running script's absolute path> wake <name>` line into the
+   pane (a bare `herdr-sleeper` would only work when installed on PATH,
+   which the launchd copy is not) and prefix the pane label with 💤.
 
 Trade-off to know: `claude --resume` replays the whole transcript, so every
 wake costs a full prompt-cache write. Pick the window accordingly — the
@@ -697,7 +698,10 @@ def sleep_agent(agent: dict, idle_hours: float, exclude: set[str], dry_run: bool
         write_json(JOURNAL, journal)
 
     # 3. reset terminal modes, then advertise the wake path in the pane and the sidebar label.
-    hint = f"{SLEEP_MARK}slept by herdr-sleeper {entry['slept_at']} — wake: " + shlex.join(["herdr-sleeper", "wake", name])
+    #    The hint must run wherever it is pasted: use this script's absolute path, since the
+    #    bare name is only on PATH when someone installed it there (launchd runs a private path).
+    hint_cmd = shlex.join([str(Path(__file__).resolve()), "wake", name])
+    hint = f"{SLEEP_MARK}slept by herdr-sleeper {entry['slept_at']} — wake: {hint_cmd}"
     herdr("pane", "run", pane, f"printf '{MODE_RESET}'; clear; printf '%s\\n' {shlex.quote(hint)}", check=False)
     herdr("pane", "rename", pane, SLEEP_MARK + (label or entry["title"] or name), check=False)
     event("slept", pane=pane, name=name, uuid=uuid, title=entry["title"], cwd=entry["cwd"])

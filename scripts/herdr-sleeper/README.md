@@ -12,8 +12,10 @@ into swap.
 **What it does.** After an agent has been idle for a **user-chosen window**
 (`idle = "12h"`, `"90m"`, `"1d"` — default 12 h) it submits `/exit`, keeps
 the pane (that is the restart slot — `herdr agent start` needs a pane at a
-shell prompt), prints a wake hint into the pane and prefixes the pane label
-with 💤. `herdr-sleeper wake <name>` relaunches with the original argv plus
+shell prompt), prints a wake hint into the pane (carrying the running
+script's absolute path, so it works without a PATH install) and prefixes
+the pane label with 💤. `herdr-sleeper wake <name>` relaunches with the
+original argv plus
 `--resume <session id>`; the session id comes from Herdr's own
 `agent_session` (reported by the official Claude integration). Verified
 round-trip: same session id, prior context intact.
@@ -106,6 +108,6 @@ Claude only, for the reason above.
 
 ## Tests
 
-`uv run --with pytest python -m pytest scripts/herdr-sleeper -q` — 64 tests
+`uv run --with pytest python -m pytest scripts/herdr-sleeper -q` — 65 tests
 covering the decision logic and the sleep/wake state machine against a
 fake `herdr`.
