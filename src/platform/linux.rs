@@ -770,11 +770,22 @@ pub fn process_exists(pid: u32) -> bool {
         return false;
     }
     let result = unsafe { libc::kill(pid as i32, 0) };
-    if result == 0 {
+    let alive = if result == 0 {
         true
     } else {
         std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
-    }
+    };
+    alive && !process_is_zombie(pid)
+}
+
+/// A zombie is terminated, merely unreaped. Container inits that do not reap
+/// orphans (the Forgejo Hyades libkrun microVM leaves killed pane
+/// grandchildren as state-Z entries reparented to PID 1; probe run 593,
+/// 2026-10-18) keep the pid visible to `kill(pid, 0)` forever, so liveness
+/// must ignore them or the shutdown ladder waits out every grace period on
+/// an already-dead session and warns about it.
+fn process_is_zombie(pid: u32) -> bool {
+    process_pgrp_comm_and_state(pid).is_some_and(|(_, _, state)| state == 'Z')
 }
 
 pub fn write_clipboard(bytes: &[u8]) -> bool {

@@ -421,11 +421,28 @@ pub(super) fn pane_read_recent_contains(socket_path: &Path, pane_id: &str, expec
 
 pub(super) fn process_exists(pid: u32) -> bool {
     let result = unsafe { libc::kill(pid as i32, 0) };
-    if result == 0 {
+    let alive = if result == 0 {
         true
     } else {
         std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
-    }
+    };
+    alive && !process_is_zombie(pid)
+}
+
+/// A zombie is terminated, merely unreaped: on CI containers whose PID 1
+/// does not reap orphans (the Forgejo Hyades libkrun microVM; probe run
+/// 593, 2026-10-18, showed a correctly killed pane child as state Z with
+/// PPid 1), the pid stays visible to `kill(pid, 0)` forever. Liveness in
+/// the terminate-on-close tests must mean "still executing". Reading /proc
+/// fails on non-Linux, where the answer stays `false`.
+fn process_is_zombie(pid: u32) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .ok()
+        .and_then(|stat| {
+            let end = stat.rfind(')')?;
+            stat[end + 2..].chars().next().map(|state| state == 'Z')
+        })
+        .unwrap_or(false)
 }
 
 pub(super) fn wait_for_pid_exit(pid: u32, timeout: Duration) -> bool {

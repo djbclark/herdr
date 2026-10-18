@@ -23,7 +23,12 @@ jobs:
   linux:
     name: linux (lint, ci-tests, ghostty-vt scalar)
     runs-on: ubuntu
-    timeout-minutes: 40
+    # Run 580's failing (shortest possible) job took 16 min on Hyades and
+    # never reached the steps after ci-tests; a full green run is longer, and
+    # the secretspec repos measured 35.5-41+ min for similar pipelines (one
+    # was killed by a 40-min timeout mid-run with all tests green). 60 leaves
+    # headroom.
+    timeout-minutes: 60
     steps:
       - uses: https://github.com/actions/checkout@v4
       - name: Install gcc and Rust (pinned by rust-toolchain.toml)
