@@ -73,12 +73,12 @@ jobs:
             ~/.cargo/git
           key: cargo-registry-v1-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-registry-v1-
-      - name: Run Linux lint
-        run: CARGO_INCREMENTAL=1 just lint
-      - name: Run Linux tests
-        run: CARGO_INCREMENTAL=1 just ci-tests 'all()'
-      - name: Check scalar libghostty with runtime safety
-        env:
-          LIBGHOSTTY_VT_SIMD: "false"
-          LIBGHOSTTY_VT_OPTIMIZE: ReleaseSafe
-        run: CARGO_INCREMENTAL=1 cargo nextest run --locked -E 'package(ghostty-vt) | test(ghostty)' --status-level fail --final-status-level fail --failure-output final --success-output never
+      - name: Run Linux lint (fmt only; probe branch skips clippy)
+        run: CARGO_INCREMENTAL=1 cargo fmt --all -- --check
+      - name: Run the two failing panes tests with diagnostics
+        run: |
+          set -euo pipefail
+          . "$HOME/.cargo/env"
+          CARGO_INCREMENTAL=1 cargo nextest run --locked \
+            -E 'test(closing_pane_terminates_processes_inside_it) + test(closing_workspace_terminates_processes_inside_it)' \
+            --no-capture --status-level fail --final-status-level fail --failure-output final

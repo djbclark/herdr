@@ -1,5 +1,108 @@
 use super::harness::*;
 
+/// Probe-only diagnostics (branch `probe/panes-diag`): when a pane or
+/// workspace close leaves a child process alive on this runner, dump what
+/// /proc knows about the survivor and the daemon before failing, so the
+/// failure can be attributed to a kill/scan/reap mechanism from the CI log.
+fn dump_survivor_diagnostics(pid: u32, base: &std::path::Path, context: &str) {
+    use std::fmt::Write as _;
+
+    let mut out = String::new();
+    let _ = writeln!(out, "=== SURVIVOR DIAG context={context} pid={pid} ===");
+    let probe = unsafe { libc::kill(pid as i32, 0) };
+    let errno = if probe == 0 {
+        0
+    } else {
+        std::io::Error::last_os_error().raw_os_error().unwrap_or(-1)
+    };
+    let _ = writeln!(out, "kill(pid,0) = {probe} errno = {errno}");
+    match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+        Ok(stat) => {
+            let _ = writeln!(out, "/proc/{pid}/stat = {stat}");
+        }
+        Err(err) => {
+            let _ = writeln!(out, "/proc/{pid}/stat unreadable: {err}");
+        }
+    }
+    if let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/status")) {
+        for line in status.lines() {
+            if line.starts_with("Name:")
+                || line.starts_with("State:")
+                || line.starts_with("PPid:")
+                || line.starts_with("NSpid:")
+            {
+                let _ = writeln!(out, "  {line}");
+            }
+        }
+    }
+    if let Ok(cmdline) = std::fs::read(format!("/proc/{pid}/cmdline")) {
+        let _ = writeln!(
+            out,
+            "cmdline = {}",
+            String::from_utf8_lossy(&cmdline).replace('\0', " ")
+        );
+    }
+
+    let _ = writeln!(out, "--- /proc scan (comm or cmdline mentions python/herdr, or comm sh) ---");
+    let mut rows: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir("/proc") {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if !name.bytes().all(|b| b.is_ascii_digit()) {
+                continue;
+            }
+            let Ok(stat) = std::fs::read_to_string(format!("/proc/{name}/stat")) else {
+                continue;
+            };
+            let Some(close) = stat.rfind(')') else { continue };
+            let Some(open) = stat.find('(') else { continue };
+            let comm = &stat[open + 1..close];
+            let rest = &stat[close + 2..];
+            let fields: Vec<&str> = rest.split_whitespace().collect();
+            if fields.len() < 4 {
+                continue;
+            }
+            let cmdline = std::fs::read(format!("/proc/{name}/cmdline"))
+                .map(|bytes| String::from_utf8_lossy(&bytes).replace('\0', " "))
+                .unwrap_or_default();
+            if comm == "sh" || cmdline.contains("python") || cmdline.contains("herdr") {
+                rows.push(format!(
+                    "pid={name} comm={comm} state={} ppid={} pgrp={} session={} cmdline={cmdline}",
+                    fields[0], fields[1], fields[2], fields[3]
+                ));
+            }
+        }
+    }
+    rows.sort();
+    for row in rows {
+        let _ = writeln!(out, "  {row}");
+    }
+
+    let _ = writeln!(out, "--- log tails under {} ---", base.display());
+    let mut stack = vec![base.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "log") {
+                if let Ok(text) = std::fs::read_to_string(&path) {
+                    let _ = writeln!(out, "[{}] tail:", path.display());
+                    for line in text.lines().rev().take(40).collect::<Vec<_>>().into_iter().rev()
+                    {
+                        let _ = writeln!(out, "  {line}");
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("{out}");
+}
+
 #[test]
 fn pane_close_only_removes_the_target_tab_when_other_tabs_exist() {
     let base = unique_test_dir();
@@ -295,10 +398,11 @@ fn closing_pane_terminates_processes_inside_it() {
         "stderr: {}",
         String::from_utf8_lossy(&closed.stderr)
     );
-    assert!(
-        wait_for_pid_exit(pid, Duration::from_secs(3)),
-        "process {pid} survived pane close"
-    );
+    let exited = wait_for_pid_exit(pid, Duration::from_secs(3));
+    if !exited {
+        dump_survivor_diagnostics(pid, &base, "pane close");
+    }
+    assert!(exited, "process {pid} survived pane close");
 
     cleanup_spawned_herdr(herdr, base);
 }
@@ -348,10 +452,11 @@ fn closing_workspace_terminates_processes_inside_it() {
         "stderr: {}",
         String::from_utf8_lossy(&closed.stderr)
     );
-    assert!(
-        wait_for_pid_exit(pid, Duration::from_secs(3)),
-        "process {pid} survived workspace close"
-    );
+    let exited = wait_for_pid_exit(pid, Duration::from_secs(3));
+    if !exited {
+        dump_survivor_diagnostics(pid, &base, "workspace close");
+    }
+    assert!(exited, "process {pid} survived workspace close");
 
     cleanup_spawned_herdr(herdr, base);
 }
