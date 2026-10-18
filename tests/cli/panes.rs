@@ -43,7 +43,10 @@ fn dump_survivor_diagnostics(pid: u32, base: &std::path::Path, context: &str) {
         );
     }
 
-    let _ = writeln!(out, "--- /proc scan (comm or cmdline mentions python/herdr, or comm sh) ---");
+    let _ = writeln!(
+        out,
+        "--- /proc scan (comm or cmdline mentions python/herdr, or comm sh) ---"
+    );
     let mut rows: Vec<String> = Vec::new();
     if let Ok(entries) = std::fs::read_dir("/proc") {
         for entry in entries.flatten() {
@@ -55,7 +58,9 @@ fn dump_survivor_diagnostics(pid: u32, base: &std::path::Path, context: &str) {
             let Ok(stat) = std::fs::read_to_string(format!("/proc/{name}/stat")) else {
                 continue;
             };
-            let Some(close) = stat.rfind(')') else { continue };
+            let Some(close) = stat.rfind(')') else {
+                continue;
+            };
             let Some(open) = stat.find('(') else { continue };
             let comm = &stat[open + 1..close];
             let rest = &stat[close + 2..];
@@ -92,7 +97,13 @@ fn dump_survivor_diagnostics(pid: u32, base: &std::path::Path, context: &str) {
             } else if path.extension().is_some_and(|ext| ext == "log") {
                 if let Ok(text) = std::fs::read_to_string(&path) {
                     let _ = writeln!(out, "[{}] tail:", path.display());
-                    for line in text.lines().rev().take(40).collect::<Vec<_>>().into_iter().rev()
+                    for line in text
+                        .lines()
+                        .rev()
+                        .take(40)
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
                     {
                         let _ = writeln!(out, "  {line}");
                     }
