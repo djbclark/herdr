@@ -108,6 +108,23 @@ Claude only, for the reason above.
 
 ## Tests
 
-`uv run --with pytest python -m pytest scripts/herdr-sleeper -q` — 65 tests
-covering the decision logic and the sleep/wake state machine against a
-fake `herdr`.
+`uv run --with pytest python -m pytest scripts/herdr-sleeper -q` covers the
+decision logic and the sleep/wake state machine against a fake `herdr`. Run it
+through CI rather than on a busy workstation.
+
+These tests are not part of `just maintenance-test` or the upstream workflows.
+The fork-only `.github/workflows/agent-ci.yml` ("Sleeper CI", stock
+`ubuntu-latest`, `contents: read`) runs exactly the command above on
+`ci/run/**` pushes and on `workflow_dispatch`. The known launch path is the
+`ci/base` overlay wrapper, which pushes `ci/run/<ref>-<sha>` to the GitHub
+remote and watches the run:
+
+```
+scripts/github-ci-run [--no-wait] REF    # from a ci/base checkout; REF = the commit to test
+```
+
+The wrapper deletes every other workflow that would fire on that push and keeps
+only `linux-ci.yml` and `agent-ci.yml`, which is why the workflow has this
+file name. Its `linux-ci.yml` runs the Cargo lint and tests on the same push,
+so one wrapper run exercises both. Publishing `ci/run/**` is a push: do it only
+after the integration is approved for publication.

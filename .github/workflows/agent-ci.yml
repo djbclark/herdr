@@ -1,0 +1,32 @@
+name: Sleeper CI
+
+# Fork-only: runs the scripts/herdr-sleeper pytest suite on stock Ubuntu.
+# Launched through the ci/base overlay wrapper (scripts/github-ci-run), which
+# pushes ci/run/** and deletes every other workflow that would fire on that
+# push. This file keeps the name agent-ci.yml because the wrapper preserves only
+# linux-ci.yml (replaced from ci/base) and agent-ci.yml.
+
+on:
+  push:
+    branches: ['ci/run/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sleeper:
+    name: herdr-sleeper (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
+        with:
+          tool: uv
+      - name: Run herdr-sleeper tests
+        run: uv run --with pytest python -m pytest scripts/herdr-sleeper -q
