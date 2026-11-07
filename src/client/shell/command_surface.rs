@@ -1,8 +1,8 @@
 use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
 
 use super::*;
-use crate::config::{format_prefix_combos, ActionKeybinds, IndexedKeybind, KeyCombo, Keybinds};
-use crate::input::{indexed_binding_label, KeybindAction, TerminalKey};
+use crate::config::{KeyCombo, Keybinds};
+use crate::input::{keybind_inventory, BoundAction, IndexedBinding, KeybindAction, TerminalKey};
 
 /// What activating a row does. Indexed rows open the digit dialog first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,551 +89,68 @@ impl ClientShellState {
 }
 
 pub(super) fn command_catalog(keybinds: &Keybinds, prefixes: &[KeyCombo]) -> Vec<CommandEntry> {
-    let mut entries = Vec::new();
-    push_pane(&mut entries, keybinds);
-    push_tab(&mut entries, keybinds);
-    push_workspace(&mut entries, keybinds);
-    push_global(&mut entries, keybinds, prefixes);
-    push_navigation(&mut entries, keybinds);
-    push_agent(&mut entries, keybinds);
-    for (index, binding) in keybinds.custom_commands.iter().enumerate() {
-        entries.push(CommandEntry {
-            group: "custom",
-            shortcut: binding.label.clone(),
-            description: binding
-                .description
-                .clone()
-                .unwrap_or_else(|| "custom command".to_owned()),
-            run: CommandRun::Custom(index),
-        });
-    }
-    entries
+    keybind_inventory(keybinds, prefixes)
+        .into_iter()
+        .map(|fact| CommandEntry {
+            group: fact.surface_group,
+            shortcut: fact.shortcut,
+            description: fact.surface_label.into_owned(),
+            run: match fact.action {
+                BoundAction::None => CommandRun::None,
+                BoundAction::Action(action) => CommandRun::Action(action),
+                BoundAction::Indexed(IndexedBinding::SwitchTab) => {
+                    CommandRun::Indexed(IndexedCommand::SwitchTab)
+                }
+                BoundAction::Indexed(IndexedBinding::SwitchWorkspace) => {
+                    CommandRun::Indexed(IndexedCommand::SwitchWorkspace)
+                }
+                BoundAction::Indexed(IndexedBinding::FocusAgent) => {
+                    CommandRun::Indexed(IndexedCommand::FocusAgent)
+                }
+                BoundAction::Custom(index) => CommandRun::Custom(index),
+            },
+        })
+        .collect()
 }
 
-fn push_pane(entries: &mut Vec<CommandEntry>, keybinds: &Keybinds) {
-    let group = "pane";
-    action(
-        entries,
-        group,
-        &keybinds.split_vertical,
-        "split vertical",
-        KeybindAction::SplitVertical,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.split_horizontal,
-        "split horizontal",
-        KeybindAction::SplitHorizontal,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.close_pane,
-        "close pane",
-        KeybindAction::ClosePane,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.rename_pane,
-        "rename pane",
-        KeybindAction::RenamePane,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.edit_scrollback,
-        "edit scrollback",
-        KeybindAction::EditScrollback,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.clear_pane,
-        "clear pane",
-        KeybindAction::ClearPane,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.copy_mode,
-        "copy mode",
-        KeybindAction::CopyMode,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.zoom,
-        "zoom pane",
-        KeybindAction::Zoom,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.resize_mode,
-        "resize mode",
-        KeybindAction::EnterResizeMode,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.resize_pane_left,
-        "resize pane left",
-        KeybindAction::ResizePaneLeft,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.resize_pane_down,
-        "resize pane down",
-        KeybindAction::ResizePaneDown,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.resize_pane_up,
-        "resize pane up",
-        KeybindAction::ResizePaneUp,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.resize_pane_right,
-        "resize pane right",
-        KeybindAction::ResizePaneRight,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.focus_pane_left,
-        "focus pane left",
-        KeybindAction::FocusPaneLeft,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.focus_pane_down,
-        "focus pane down",
-        KeybindAction::FocusPaneDown,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.focus_pane_up,
-        "focus pane up",
-        KeybindAction::FocusPaneUp,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.focus_pane_right,
-        "focus pane right",
-        KeybindAction::FocusPaneRight,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.cycle_pane_next,
-        "cycle pane next",
-        KeybindAction::CyclePaneNext,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.cycle_pane_previous,
-        "cycle pane previous",
-        KeybindAction::CyclePanePrevious,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.last_pane,
-        "last pane",
-        KeybindAction::LastPane,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.toggle_sidebar,
-        "toggle sidebar",
-        KeybindAction::ToggleSidebar,
-    );
-    navigate_focus(
-        entries,
-        &keybinds.navigate.pane_left,
-        "focus pane left",
-        KeybindAction::FocusPaneLeft,
-    );
-    navigate_focus(
-        entries,
-        &keybinds.navigate.pane_down,
-        "focus pane down",
-        KeybindAction::FocusPaneDown,
-    );
-    navigate_focus(
-        entries,
-        &keybinds.navigate.pane_up,
-        "focus pane up",
-        KeybindAction::FocusPaneUp,
-    );
-    navigate_focus(
-        entries,
-        &keybinds.navigate.pane_right,
-        "focus pane right",
-        KeybindAction::FocusPaneRight,
-    );
-    inert(
-        entries,
-        group,
-        "left",
-        "focus pane left",
-        CommandRun::Action(KeybindAction::FocusPaneLeft),
-    );
-    inert(
-        entries,
-        group,
-        "right",
-        "focus pane right",
-        CommandRun::Action(KeybindAction::FocusPaneRight),
-    );
-    inert(
-        entries,
-        group,
-        "tab",
-        "cycle pane next",
-        CommandRun::Action(KeybindAction::CyclePaneNext),
-    );
-    inert(
-        entries,
-        group,
-        "shift+tab",
-        "cycle pane previous",
-        CommandRun::Action(KeybindAction::CyclePanePrevious),
-    );
-}
-
-fn push_tab(entries: &mut Vec<CommandEntry>, keybinds: &Keybinds) {
-    let group = "tab";
-    action(
-        entries,
-        group,
-        &keybinds.new_tab,
-        "new tab",
-        KeybindAction::NewTab,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.rename_tab,
-        "rename tab",
-        KeybindAction::RenameTab,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.previous_tab,
-        "previous tab",
-        KeybindAction::PreviousTab,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.next_tab,
-        "next tab",
-        KeybindAction::NextTab,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.move_tab_previous,
-        "move tab left",
-        KeybindAction::MoveTabPrevious,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.move_tab_next,
-        "move tab right",
-        KeybindAction::MoveTabNext,
-    );
-    indexed(
-        entries,
-        group,
-        &keybinds.switch_tab,
-        "switch tab 1-9",
-        IndexedCommand::SwitchTab,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.close_tab,
-        "close tab",
-        KeybindAction::CloseTab,
-    );
-}
-
-fn push_workspace(entries: &mut Vec<CommandEntry>, keybinds: &Keybinds) {
-    let group = "workspace";
-    action(
-        entries,
-        group,
-        &keybinds.workspace_picker,
-        "workspace navigation",
-        KeybindAction::WorkspacePicker,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.goto,
-        "session navigator",
-        KeybindAction::OpenNavigator,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.new_workspace,
-        "new workspace",
-        KeybindAction::NewWorkspace,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.new_worktree,
-        "new worktree",
-        KeybindAction::NewWorktree,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.open_worktree,
-        "open worktree",
-        KeybindAction::OpenWorktree,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.remove_worktree,
-        "delete worktree checkout",
-        KeybindAction::RemoveWorktree,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.rename_workspace,
-        "rename workspace",
-        KeybindAction::RenameWorkspace,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.close_workspace,
-        "close workspace",
-        KeybindAction::CloseWorkspace,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.previous_workspace,
-        "previous workspace",
-        KeybindAction::PreviousWorkspace,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.next_workspace,
-        "next workspace",
-        KeybindAction::NextWorkspace,
-    );
-    indexed(
-        entries,
-        group,
-        &keybinds.switch_workspace,
-        "switch workspace 1-9",
-        IndexedCommand::SwitchWorkspace,
-    );
-    inert(
-        entries,
-        group,
-        "1..9",
-        "switch workspace",
-        CommandRun::Indexed(IndexedCommand::SwitchWorkspace),
-    );
-}
-
-fn push_global(entries: &mut Vec<CommandEntry>, keybinds: &Keybinds, prefixes: &[KeyCombo]) {
-    let group = "global";
-    inert(
-        entries,
-        group,
-        format_prefix_combos(prefixes),
-        "prefix mode",
-        CommandRun::None,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.help,
-        "keybinds",
-        KeybindAction::Help,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.settings,
-        "settings",
-        KeybindAction::Settings,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.detach,
-        "detach",
-        KeybindAction::Detach,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.reload_config,
-        "reload config",
-        KeybindAction::ReloadConfig,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.open_notification_target,
-        "open notification target",
-        KeybindAction::OpenNotificationTarget,
-    );
-}
-
-fn push_navigation(entries: &mut Vec<CommandEntry>, keybinds: &Keybinds) {
-    let group = "navigation";
-    inert(entries, group, "esc", "back", CommandRun::None);
-    let up = keybinds
-        .navigate
-        .workspace_up
-        .label()
-        .unwrap_or_else(|| "unset".to_owned());
-    let down = keybinds
-        .navigate
-        .workspace_down
-        .label()
-        .unwrap_or_else(|| "unset".to_owned());
-    inert(entries, group, up, "workspace list up", CommandRun::None);
-    inert(
-        entries,
-        group,
-        down,
-        "workspace list down",
-        CommandRun::None,
-    );
-    inert(entries, group, "enter", "open workspace", CommandRun::None);
-}
-
-fn push_agent(entries: &mut Vec<CommandEntry>, keybinds: &Keybinds) {
-    let group = "agent";
-    action(
-        entries,
-        group,
-        &keybinds.previous_agent,
-        "previous agent",
-        KeybindAction::PreviousAgent,
-    );
-    action(
-        entries,
-        group,
-        &keybinds.next_agent,
-        "next agent",
-        KeybindAction::NextAgent,
-    );
-    indexed(
-        entries,
-        group,
-        &keybinds.focus_agent,
-        "focus agent 1-9",
-        IndexedCommand::FocusAgent,
-    );
-}
-
-fn action(
-    entries: &mut Vec<CommandEntry>,
-    group: &'static str,
-    bindings: &ActionKeybinds,
-    description: &str,
-    command: KeybindAction,
-) {
-    match bindings.label() {
-        Some(shortcut) => inert(
-            entries,
-            group,
-            shortcut,
-            description,
-            CommandRun::Action(command),
-        ),
-        None => inert(entries, group, "unset", description, CommandRun::None),
-    }
-}
-
-fn navigate_focus(
-    entries: &mut Vec<CommandEntry>,
-    bindings: &ActionKeybinds,
-    description: &str,
-    command: KeybindAction,
-) {
-    action(entries, "pane", bindings, description, command);
-}
-
-fn indexed(
-    entries: &mut Vec<CommandEntry>,
-    group: &'static str,
-    bindings: &[IndexedKeybind],
-    description: &str,
-    kind: IndexedCommand,
-) {
-    let run = if bindings.is_empty() {
-        CommandRun::None
+/// Exact description, then prefix, then word start, then substring. A shortcut
+/// match uses the same ladder one step lower, so a shortcut query still hits
+/// and a named command still wins.
+fn match_rank(text: &str, query: &str) -> Option<u8> {
+    let text = text.to_lowercase();
+    if text == query {
+        Some(0)
+    } else if text.starts_with(query) {
+        Some(1)
+    } else if text.split_whitespace().any(|word| word.starts_with(query)) {
+        Some(2)
+    } else if text.contains(query) {
+        Some(3)
     } else {
-        CommandRun::Indexed(kind)
-    };
-    inert(
-        entries,
-        group,
-        indexed_binding_label(bindings),
-        description,
-        run,
-    );
-}
-
-fn inert(
-    entries: &mut Vec<CommandEntry>,
-    group: &'static str,
-    shortcut: impl Into<String>,
-    description: &str,
-    run: CommandRun,
-) {
-    entries.push(CommandEntry {
-        group,
-        shortcut: shortcut.into(),
-        description: description.to_owned(),
-        run,
-    });
+        None
+    }
 }
 
 pub(super) fn filter_entries(entries: &[CommandEntry], query: &str) -> Vec<usize> {
+    let query = query.trim().to_lowercase();
     if query.is_empty() {
         return (0..entries.len()).collect();
     }
-    let query = query.to_lowercase();
-    entries
-        .iter()
-        .enumerate()
-        .filter_map(|(index, entry)| {
-            (entry.shortcut.to_lowercase().contains(&query)
-                || entry.description.to_lowercase().contains(&query))
-            .then_some(index)
-        })
-        .collect()
+    let mut ranked = Vec::new();
+    for (index, entry) in entries.iter().enumerate() {
+        let description = match_rank(&entry.description, &query);
+        let shortcut = match_rank(&entry.shortcut, &query).map(|rank| rank.saturating_add(4));
+        let rank = match (description, shortcut) {
+            (Some(description), Some(shortcut)) => Some(description.min(shortcut)),
+            (Some(rank), None) | (None, Some(rank)) => Some(rank),
+            (None, None) => None,
+        };
+        if let Some(rank) = rank {
+            ranked.push((rank, index));
+        }
+    }
+    ranked.sort_by_key(|(rank, index)| (*rank, *index));
+    ranked.into_iter().map(|(_, index)| index).collect()
 }
 
 pub(super) fn surface_lines(
@@ -1260,6 +777,46 @@ mod tests {
         assert_eq!(previous.run, CommandRun::None);
         assert!(filter_entries(&entries, "panes").is_empty());
         assert!(!filter_entries(&entries, "PaNe").is_empty());
+        let new_tab = filter_entries(&entries, "new tab");
+        assert_eq!(
+            entries[new_tab[0]].description, "new tab",
+            "an exact name stays ahead of a longer match"
+        );
+    }
+
+    #[test]
+    fn filter_ranks_exact_names_ahead_of_substrings_and_keeps_shortcuts() {
+        let entries = vec![
+            entry("pane", "a", "move pane to new tab"),
+            entry("tab", "b", "new tab"),
+            entry("workspace", "prefix+z", "zoom pane"),
+            entry("global", "x", "prefix+z note"),
+            entry("pane", "c", "xpane"),
+            entry("tab", "d", "pane split"),
+        ];
+        assert_eq!(filter_entries(&entries, ""), vec![0, 1, 2, 3, 4, 5]);
+        assert_eq!(filter_entries(&entries, "   "), vec![0, 1, 2, 3, 4, 5]);
+        assert_eq!(
+            filter_entries(&entries, "new tab")
+                .into_iter()
+                .map(|index| entries[index].description.as_str())
+                .collect::<Vec<_>>(),
+            vec!["new tab", "move pane to new tab"]
+        );
+        assert_eq!(
+            filter_entries(&entries, "prefix+z")
+                .into_iter()
+                .map(|index| entries[index].description.as_str())
+                .collect::<Vec<_>>(),
+            vec!["prefix+z note", "zoom pane"]
+        );
+        assert_eq!(
+            filter_entries(&entries, "pane")
+                .into_iter()
+                .map(|index| entries[index].description.as_str())
+                .collect::<Vec<_>>(),
+            vec!["pane split", "move pane to new tab", "zoom pane", "xpane"]
+        );
     }
 
     #[test]

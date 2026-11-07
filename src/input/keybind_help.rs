@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 
+use super::keybindings::KeybindAction;
 use crate::{
     config::{ActionKeybinds, IndexedKeybind, Keybinds},
     input::TerminalKey,
@@ -34,6 +35,7 @@ pub(crate) fn keybind_help_text_char(key: &TerminalKey) -> Option<char> {
     Some(character)
 }
 
+#[cfg(test)]
 fn entry(key: impl Into<String>, label: &'static str) -> KeybindHelpEntry {
     (key.into(), Cow::Borrowed(label))
 }
@@ -72,164 +74,784 @@ fn indexed_range_prefix(bindings: &[IndexedKeybind]) -> Option<&str> {
     Some(prefix)
 }
 
+/// What a shared keybind row does when the command surface runs it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BoundAction {
+    None,
+    Action(KeybindAction),
+    Indexed(IndexedBinding),
+    Custom(usize),
+}
+
+/// A row that asks for a typed 1–99 index before it runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IndexedBinding {
+    SwitchTab,
+    SwitchWorkspace,
+    FocusAgent,
+}
+
+/// One row in the only keybind inventory. Help and the command surface are
+/// projections of this list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct KeybindFact {
+    pub(crate) help_group: &'static str,
+    pub(crate) help_ord: u16,
+    pub(crate) help_part: u8,
+    pub(crate) help_label: Cow<'static, str>,
+    pub(crate) surface_group: &'static str,
+    pub(crate) shortcut: String,
+    pub(crate) surface_label: Cow<'static, str>,
+    pub(crate) action: BoundAction,
+}
+
+const HELP_GROUP_ORDER: [&str; 5] = [
+    "global",
+    "navigation",
+    "workspaces / tabs",
+    "panes",
+    "custom",
+];
+
+pub(crate) fn keybind_inventory(
+    keybinds: &Keybinds,
+    prefixes: &[crate::config::KeyCombo],
+) -> Vec<KeybindFact> {
+    let mut rows = Vec::new();
+    let panes = "panes";
+    let pane = "pane";
+    bound(
+        &mut rows,
+        panes,
+        0,
+        pane,
+        &keybinds.split_vertical,
+        "split vertical",
+        KeybindAction::SplitVertical,
+    );
+    bound(
+        &mut rows,
+        panes,
+        1,
+        pane,
+        &keybinds.split_horizontal,
+        "split horizontal",
+        KeybindAction::SplitHorizontal,
+    );
+    bound(
+        &mut rows,
+        panes,
+        2,
+        pane,
+        &keybinds.close_pane,
+        "close pane",
+        KeybindAction::ClosePane,
+    );
+    bound(
+        &mut rows,
+        panes,
+        3,
+        pane,
+        &keybinds.rename_pane,
+        "rename pane",
+        KeybindAction::RenamePane,
+    );
+    bound(
+        &mut rows,
+        panes,
+        4,
+        pane,
+        &keybinds.edit_scrollback,
+        "edit scrollback",
+        KeybindAction::EditScrollback,
+    );
+    bound(
+        &mut rows,
+        panes,
+        5,
+        pane,
+        &keybinds.clear_pane,
+        "clear pane",
+        KeybindAction::ClearPane,
+    );
+    bound(
+        &mut rows,
+        panes,
+        6,
+        pane,
+        &keybinds.copy_mode,
+        "copy mode",
+        KeybindAction::CopyMode,
+    );
+    bound(
+        &mut rows,
+        panes,
+        7,
+        pane,
+        &keybinds.zoom,
+        "zoom pane",
+        KeybindAction::Zoom,
+    );
+    bound(
+        &mut rows,
+        panes,
+        8,
+        pane,
+        &keybinds.resize_mode,
+        "resize mode",
+        KeybindAction::EnterResizeMode,
+    );
+    bound(
+        &mut rows,
+        panes,
+        9,
+        pane,
+        &keybinds.resize_pane_left,
+        "resize pane left",
+        KeybindAction::ResizePaneLeft,
+    );
+    bound(
+        &mut rows,
+        panes,
+        10,
+        pane,
+        &keybinds.resize_pane_down,
+        "resize pane down",
+        KeybindAction::ResizePaneDown,
+    );
+    bound(
+        &mut rows,
+        panes,
+        11,
+        pane,
+        &keybinds.resize_pane_up,
+        "resize pane up",
+        KeybindAction::ResizePaneUp,
+    );
+    bound(
+        &mut rows,
+        panes,
+        12,
+        pane,
+        &keybinds.resize_pane_right,
+        "resize pane right",
+        KeybindAction::ResizePaneRight,
+    );
+    bound(
+        &mut rows,
+        panes,
+        14,
+        pane,
+        &keybinds.focus_pane_left,
+        "focus pane left",
+        KeybindAction::FocusPaneLeft,
+    );
+    bound(
+        &mut rows,
+        panes,
+        15,
+        pane,
+        &keybinds.focus_pane_down,
+        "focus pane down",
+        KeybindAction::FocusPaneDown,
+    );
+    bound(
+        &mut rows,
+        panes,
+        16,
+        pane,
+        &keybinds.focus_pane_up,
+        "focus pane up",
+        KeybindAction::FocusPaneUp,
+    );
+    bound(
+        &mut rows,
+        panes,
+        17,
+        pane,
+        &keybinds.focus_pane_right,
+        "focus pane right",
+        KeybindAction::FocusPaneRight,
+    );
+    bound(
+        &mut rows,
+        panes,
+        18,
+        pane,
+        &keybinds.cycle_pane_next,
+        "cycle pane next",
+        KeybindAction::CyclePaneNext,
+    );
+    bound(
+        &mut rows,
+        panes,
+        19,
+        pane,
+        &keybinds.cycle_pane_previous,
+        "cycle pane previous",
+        KeybindAction::CyclePanePrevious,
+    );
+    bound(
+        &mut rows,
+        panes,
+        20,
+        pane,
+        &keybinds.last_pane,
+        "last pane",
+        KeybindAction::LastPane,
+    );
+    bound(
+        &mut rows,
+        panes,
+        13,
+        pane,
+        &keybinds.toggle_sidebar,
+        "toggle sidebar",
+        KeybindAction::ToggleSidebar,
+    );
+    navigate_focus(
+        &mut rows,
+        &keybinds.navigate.pane_left,
+        0,
+        "focus pane left",
+        KeybindAction::FocusPaneLeft,
+    );
+    navigate_focus(
+        &mut rows,
+        &keybinds.navigate.pane_down,
+        1,
+        "focus pane down",
+        KeybindAction::FocusPaneDown,
+    );
+    navigate_focus(
+        &mut rows,
+        &keybinds.navigate.pane_up,
+        2,
+        "focus pane up",
+        KeybindAction::FocusPaneUp,
+    );
+    navigate_focus(
+        &mut rows,
+        &keybinds.navigate.pane_right,
+        3,
+        "focus pane right",
+        KeybindAction::FocusPaneRight,
+    );
+    plain(
+        &mut rows,
+        "navigation",
+        2,
+        4,
+        "move focus",
+        pane,
+        "left",
+        "focus pane left",
+        BoundAction::Action(KeybindAction::FocusPaneLeft),
+    );
+    plain(
+        &mut rows,
+        "navigation",
+        2,
+        5,
+        "move focus",
+        pane,
+        "right",
+        "focus pane right",
+        BoundAction::Action(KeybindAction::FocusPaneRight),
+    );
+    plain(
+        &mut rows,
+        "navigation",
+        3,
+        0,
+        "cycle pane",
+        pane,
+        "tab",
+        "cycle pane next",
+        BoundAction::Action(KeybindAction::CyclePaneNext),
+    );
+    plain(
+        &mut rows,
+        "navigation",
+        3,
+        1,
+        "cycle pane",
+        pane,
+        "shift+tab",
+        "cycle pane previous",
+        BoundAction::Action(KeybindAction::CyclePanePrevious),
+    );
+
+    let tabs = "workspaces / tabs";
+    let tab = "tab";
+    bound(
+        &mut rows,
+        tabs,
+        14,
+        tab,
+        &keybinds.new_tab,
+        "new tab",
+        KeybindAction::NewTab,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        15,
+        tab,
+        &keybinds.rename_tab,
+        "rename tab",
+        KeybindAction::RenameTab,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        16,
+        tab,
+        &keybinds.previous_tab,
+        "previous tab",
+        KeybindAction::PreviousTab,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        17,
+        tab,
+        &keybinds.next_tab,
+        "next tab",
+        KeybindAction::NextTab,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        18,
+        tab,
+        &keybinds.move_tab_previous,
+        "move tab left",
+        KeybindAction::MoveTabPrevious,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        19,
+        tab,
+        &keybinds.move_tab_next,
+        "move tab right",
+        KeybindAction::MoveTabNext,
+    );
+    indexed(
+        &mut rows,
+        tabs,
+        20,
+        tab,
+        &keybinds.switch_tab,
+        "switch tab 1-9",
+        IndexedBinding::SwitchTab,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        21,
+        tab,
+        &keybinds.close_tab,
+        "close tab",
+        KeybindAction::CloseTab,
+    );
+
+    let workspace = "workspace";
+    bound(
+        &mut rows,
+        tabs,
+        0,
+        workspace,
+        &keybinds.workspace_picker,
+        "workspace navigation",
+        KeybindAction::WorkspacePicker,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        1,
+        workspace,
+        &keybinds.goto,
+        "session navigator",
+        KeybindAction::OpenNavigator,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        2,
+        workspace,
+        &keybinds.new_workspace,
+        "new workspace",
+        KeybindAction::NewWorkspace,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        3,
+        workspace,
+        &keybinds.new_worktree,
+        "new worktree",
+        KeybindAction::NewWorktree,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        4,
+        workspace,
+        &keybinds.open_worktree,
+        "open worktree",
+        KeybindAction::OpenWorktree,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        5,
+        workspace,
+        &keybinds.remove_worktree,
+        "delete worktree checkout",
+        KeybindAction::RemoveWorktree,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        6,
+        workspace,
+        &keybinds.rename_workspace,
+        "rename workspace",
+        KeybindAction::RenameWorkspace,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        7,
+        workspace,
+        &keybinds.close_workspace,
+        "close workspace",
+        KeybindAction::CloseWorkspace,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        8,
+        workspace,
+        &keybinds.previous_workspace,
+        "previous workspace",
+        KeybindAction::PreviousWorkspace,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        9,
+        workspace,
+        &keybinds.next_workspace,
+        "next workspace",
+        KeybindAction::NextWorkspace,
+    );
+    indexed(
+        &mut rows,
+        tabs,
+        10,
+        workspace,
+        &keybinds.switch_workspace,
+        "switch workspace 1-9",
+        IndexedBinding::SwitchWorkspace,
+    );
+    plain(
+        &mut rows,
+        "navigation",
+        5,
+        0,
+        "switch workspace",
+        workspace,
+        "1..9",
+        "switch workspace",
+        BoundAction::Indexed(IndexedBinding::SwitchWorkspace),
+    );
+
+    let global = "global";
+    plain(
+        &mut rows,
+        global,
+        0,
+        0,
+        "prefix mode",
+        global,
+        crate::config::format_prefix_combos(prefixes),
+        "prefix mode",
+        BoundAction::None,
+    );
+    bound(
+        &mut rows,
+        global,
+        1,
+        global,
+        &keybinds.help,
+        "keybinds",
+        KeybindAction::Help,
+    );
+    bound(
+        &mut rows,
+        global,
+        2,
+        global,
+        &keybinds.settings,
+        "settings",
+        KeybindAction::Settings,
+    );
+    bound(
+        &mut rows,
+        global,
+        3,
+        global,
+        &keybinds.detach,
+        "detach",
+        KeybindAction::Detach,
+    );
+    bound(
+        &mut rows,
+        global,
+        4,
+        global,
+        &keybinds.reload_config,
+        "reload config",
+        KeybindAction::ReloadConfig,
+    );
+    bound(
+        &mut rows,
+        global,
+        5,
+        global,
+        &keybinds.open_notification_target,
+        "open notification target",
+        KeybindAction::OpenNotificationTarget,
+    );
+
+    let navigation = "navigation";
+    plain(
+        &mut rows,
+        navigation,
+        0,
+        0,
+        "back",
+        navigation,
+        "esc",
+        "back",
+        BoundAction::None,
+    );
+    let up = binding_label(&keybinds.navigate.workspace_up);
+    let down = binding_label(&keybinds.navigate.workspace_down);
+    plain(
+        &mut rows,
+        navigation,
+        1,
+        0,
+        "workspace list",
+        navigation,
+        up,
+        "workspace list up",
+        BoundAction::None,
+    );
+    plain(
+        &mut rows,
+        navigation,
+        1,
+        1,
+        "workspace list",
+        navigation,
+        down,
+        "workspace list down",
+        BoundAction::None,
+    );
+    plain(
+        &mut rows,
+        navigation,
+        4,
+        0,
+        "open workspace",
+        navigation,
+        "enter",
+        "open workspace",
+        BoundAction::None,
+    );
+
+    let agent = "agent";
+    bound(
+        &mut rows,
+        tabs,
+        11,
+        agent,
+        &keybinds.previous_agent,
+        "previous agent",
+        KeybindAction::PreviousAgent,
+    );
+    bound(
+        &mut rows,
+        tabs,
+        12,
+        agent,
+        &keybinds.next_agent,
+        "next agent",
+        KeybindAction::NextAgent,
+    );
+    indexed(
+        &mut rows,
+        tabs,
+        13,
+        agent,
+        &keybinds.focus_agent,
+        "focus agent 1-9",
+        IndexedBinding::FocusAgent,
+    );
+
+    for (index, binding) in keybinds.custom_commands.iter().enumerate() {
+        let label = binding
+            .description
+            .clone()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed("custom command"));
+        rows.push(KeybindFact {
+            help_group: "custom",
+            help_ord: index as u16,
+            help_part: 0,
+            help_label: label.clone(),
+            surface_group: "custom",
+            shortcut: binding.label.clone(),
+            surface_label: label,
+            action: BoundAction::Custom(index),
+        });
+    }
+    rows
+}
+
+fn bound(
+    rows: &mut Vec<KeybindFact>,
+    help_group: &'static str,
+    help_ord: u16,
+    surface_group: &'static str,
+    bindings: &ActionKeybinds,
+    label: &'static str,
+    command: KeybindAction,
+) {
+    let (shortcut, action) = match bindings.label() {
+        Some(shortcut) => (shortcut, BoundAction::Action(command)),
+        None => ("unset".to_owned(), BoundAction::None),
+    };
+    plain(
+        rows,
+        help_group,
+        help_ord,
+        0,
+        label,
+        surface_group,
+        shortcut,
+        label,
+        action,
+    );
+}
+
+fn indexed(
+    rows: &mut Vec<KeybindFact>,
+    help_group: &'static str,
+    help_ord: u16,
+    surface_group: &'static str,
+    bindings: &[IndexedKeybind],
+    label: &'static str,
+    kind: IndexedBinding,
+) {
+    let action = if bindings.is_empty() {
+        BoundAction::None
+    } else {
+        BoundAction::Indexed(kind)
+    };
+    plain(
+        rows,
+        help_group,
+        help_ord,
+        0,
+        label,
+        surface_group,
+        indexed_binding_label(bindings),
+        label,
+        action,
+    );
+}
+
+fn navigate_focus(
+    rows: &mut Vec<KeybindFact>,
+    bindings: &ActionKeybinds,
+    help_part: u8,
+    label: &'static str,
+    command: KeybindAction,
+) {
+    let (shortcut, action) = match bindings.label() {
+        Some(shortcut) => (shortcut, BoundAction::Action(command)),
+        None => ("unset".to_owned(), BoundAction::None),
+    };
+    plain(
+        rows,
+        "navigation",
+        2,
+        help_part,
+        "move focus",
+        "pane",
+        shortcut,
+        label,
+        action,
+    );
+}
+
+fn plain(
+    rows: &mut Vec<KeybindFact>,
+    help_group: &'static str,
+    help_ord: u16,
+    help_part: u8,
+    help_label: &'static str,
+    surface_group: &'static str,
+    shortcut: impl Into<String>,
+    surface_label: &'static str,
+    action: BoundAction,
+) {
+    rows.push(KeybindFact {
+        help_group,
+        help_ord,
+        help_part,
+        help_label: Cow::Borrowed(help_label),
+        surface_group,
+        shortcut: shortcut.into(),
+        surface_label: Cow::Borrowed(surface_label),
+        action,
+    });
+}
+
 pub(crate) fn keybind_help_groups(
     keybinds: &Keybinds,
     prefixes: &[crate::config::KeyCombo],
 ) -> Vec<KeybindHelpGroup> {
-    let mut groups = vec![
-        (
-            "global",
-            vec![
-                entry(crate::config::format_prefix_combos(prefixes), "prefix mode"),
-                entry(binding_label(&keybinds.help), "keybinds"),
-                entry(binding_label(&keybinds.settings), "settings"),
-                entry(binding_label(&keybinds.detach), "detach"),
-                entry(binding_label(&keybinds.reload_config), "reload config"),
-                entry(
-                    binding_label(&keybinds.open_notification_target),
-                    "open notification target",
-                ),
-            ],
-        ),
-        (
-            "navigation",
-            vec![
-                entry("esc", "back"),
-                entry(
-                    format!(
-                        "{} / {}",
-                        binding_label(&keybinds.navigate.workspace_up),
-                        binding_label(&keybinds.navigate.workspace_down)
-                    ),
-                    "workspace list",
-                ),
-                entry(
-                    format!(
-                        "{} / {} / {} / {} / left / right",
-                        binding_label(&keybinds.navigate.pane_left),
-                        binding_label(&keybinds.navigate.pane_down),
-                        binding_label(&keybinds.navigate.pane_up),
-                        binding_label(&keybinds.navigate.pane_right)
-                    ),
-                    "move focus",
-                ),
-                entry("tab / shift+tab", "cycle pane"),
-                entry("enter", "open workspace"),
-                entry("1..9", "switch workspace"),
-            ],
-        ),
-        (
-            "workspaces / tabs",
-            vec![
-                entry(
-                    binding_label(&keybinds.workspace_picker),
-                    "workspace navigation",
-                ),
-                entry(binding_label(&keybinds.goto), "session navigator"),
-                entry(binding_label(&keybinds.new_workspace), "new workspace"),
-                entry(binding_label(&keybinds.new_worktree), "new worktree"),
-                entry(binding_label(&keybinds.open_worktree), "open worktree"),
-                entry(
-                    binding_label(&keybinds.remove_worktree),
-                    "delete worktree checkout",
-                ),
-                entry(
-                    binding_label(&keybinds.rename_workspace),
-                    "rename workspace",
-                ),
-                entry(binding_label(&keybinds.close_workspace), "close workspace"),
-                entry(
-                    binding_label(&keybinds.previous_workspace),
-                    "previous workspace",
-                ),
-                entry(binding_label(&keybinds.next_workspace), "next workspace"),
-                entry(
-                    indexed_binding_label(&keybinds.switch_workspace),
-                    "switch workspace 1-9",
-                ),
-                entry(binding_label(&keybinds.previous_agent), "previous agent"),
-                entry(binding_label(&keybinds.next_agent), "next agent"),
-                entry(
-                    indexed_binding_label(&keybinds.focus_agent),
-                    "focus agent 1-9",
-                ),
-                entry(binding_label(&keybinds.new_tab), "new tab"),
-                entry(binding_label(&keybinds.rename_tab), "rename tab"),
-                entry(binding_label(&keybinds.previous_tab), "previous tab"),
-                entry(binding_label(&keybinds.next_tab), "next tab"),
-                entry(binding_label(&keybinds.move_tab_previous), "move tab left"),
-                entry(binding_label(&keybinds.move_tab_next), "move tab right"),
-                entry(
-                    indexed_binding_label(&keybinds.switch_tab),
-                    "switch tab 1-9",
-                ),
-                entry(binding_label(&keybinds.close_tab), "close tab"),
-            ],
-        ),
-        (
-            "panes",
-            vec![
-                entry(binding_label(&keybinds.split_vertical), "split vertical"),
-                entry(
-                    binding_label(&keybinds.split_horizontal),
-                    "split horizontal",
-                ),
-                entry(binding_label(&keybinds.close_pane), "close pane"),
-                entry(binding_label(&keybinds.rename_pane), "rename pane"),
-                entry(binding_label(&keybinds.edit_scrollback), "edit scrollback"),
-                entry(binding_label(&keybinds.clear_pane), "clear pane"),
-                entry(binding_label(&keybinds.copy_mode), "copy mode"),
-                entry(binding_label(&keybinds.zoom), "zoom pane"),
-                entry(binding_label(&keybinds.resize_mode), "resize mode"),
-                entry(
-                    binding_label(&keybinds.resize_pane_left),
-                    "resize pane left",
-                ),
-                entry(
-                    binding_label(&keybinds.resize_pane_down),
-                    "resize pane down",
-                ),
-                entry(binding_label(&keybinds.resize_pane_up), "resize pane up"),
-                entry(
-                    binding_label(&keybinds.resize_pane_right),
-                    "resize pane right",
-                ),
-                entry(binding_label(&keybinds.toggle_sidebar), "toggle sidebar"),
-                entry(binding_label(&keybinds.focus_pane_left), "focus pane left"),
-                entry(binding_label(&keybinds.focus_pane_down), "focus pane down"),
-                entry(binding_label(&keybinds.focus_pane_up), "focus pane up"),
-                entry(
-                    binding_label(&keybinds.focus_pane_right),
-                    "focus pane right",
-                ),
-                entry(binding_label(&keybinds.cycle_pane_next), "cycle pane next"),
-                entry(
-                    binding_label(&keybinds.cycle_pane_previous),
-                    "cycle pane previous",
-                ),
-                entry(binding_label(&keybinds.last_pane), "last pane"),
-            ],
-        ),
-    ];
-
-    if !keybinds.custom_commands.is_empty() {
-        groups.push((
-            "custom",
-            keybinds
-                .custom_commands
-                .iter()
-                .map(|binding| {
-                    (
-                        binding.label.clone(),
-                        binding
-                            .description
-                            .clone()
-                            .map(Cow::Owned)
-                            .unwrap_or(Cow::Borrowed("custom command")),
-                    )
-                })
-                .collect(),
-        ));
+    let facts = keybind_inventory(keybinds, prefixes);
+    let mut groups = Vec::new();
+    for group in HELP_GROUP_ORDER {
+        let mut rows: Vec<&KeybindFact> = facts
+            .iter()
+            .filter(|fact| fact.help_group == group)
+            .collect();
+        if rows.is_empty() {
+            continue;
+        }
+        rows.sort_by_key(|fact| (fact.help_ord, fact.help_part));
+        let mut entries = Vec::new();
+        let mut index = 0;
+        while index < rows.len() {
+            let ord = rows[index].help_ord;
+            let label = rows[index].help_label.clone();
+            let mut parts = Vec::new();
+            while index < rows.len() && rows[index].help_ord == ord {
+                parts.push(rows[index].shortcut.clone());
+                index += 1;
+            }
+            entries.push((parts.join(" / "), label));
+        }
+        groups.push((group, entries));
     }
     groups
 }
@@ -305,6 +927,68 @@ mod tests {
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].1[0].1, "close pane");
         assert!(filter_keybind_help_groups(groups(), "panes").is_empty());
+    }
+
+    #[test]
+    fn help_and_the_command_surface_read_one_inventory() {
+        let prefixes = [(KeyCode::Char('b'), KeyModifiers::CONTROL)];
+        let keybinds = Keybinds::default();
+        let facts = keybind_inventory(&keybinds, &prefixes);
+        let groups = keybind_help_groups(&keybinds, &prefixes);
+        assert_eq!(
+            groups.iter().map(|(group, _)| *group).collect::<Vec<_>>(),
+            ["global", "navigation", "workspaces / tabs", "panes"]
+        );
+        let navigation = &groups[1].1;
+        assert_eq!(navigation[0].0, "esc");
+        assert_eq!(navigation[0].1, "back");
+        assert_eq!(navigation[1].1, "workspace list");
+        assert_eq!(navigation[2].1, "move focus");
+        assert!(navigation[2].0.ends_with(" / left / right"));
+        assert_eq!(navigation[3].0, "tab / shift+tab");
+        assert_eq!(navigation[3].1, "cycle pane");
+        assert_eq!(navigation[4].0, "enter");
+        assert_eq!(navigation[4].1, "open workspace");
+        assert_eq!(navigation[5].0, "1..9");
+        assert_eq!(navigation[5].1, "switch workspace");
+
+        let panes = &groups[3].1;
+        let toggle = panes
+            .iter()
+            .position(|entry| entry.1 == "toggle sidebar")
+            .expect("toggle");
+        let focus = panes
+            .iter()
+            .position(|entry| entry.1 == "focus pane left")
+            .expect("focus");
+        assert!(toggle < focus);
+        let zoom = facts
+            .iter()
+            .find(|fact| fact.surface_label == "zoom pane")
+            .expect("zoom");
+        let help_zoom = panes
+            .iter()
+            .find(|entry| entry.1 == "zoom pane")
+            .expect("help zoom");
+        assert_eq!(help_zoom.0, zoom.shortcut);
+        assert_eq!(zoom.surface_group, "pane");
+        assert_eq!(
+            facts
+                .iter()
+                .filter(|fact| fact.surface_label == "focus pane left")
+                .count(),
+            3
+        );
+        let mut surface_groups = Vec::new();
+        for fact in &facts {
+            if surface_groups.last().copied() != Some(fact.surface_group) {
+                surface_groups.push(fact.surface_group);
+            }
+        }
+        assert_eq!(
+            surface_groups,
+            ["pane", "tab", "workspace", "global", "navigation", "agent"]
+        );
     }
 
     #[test]
