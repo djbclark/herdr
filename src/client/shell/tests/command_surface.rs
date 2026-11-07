@@ -464,3 +464,51 @@ fn mouse_outside_closes_and_cancel_steps_back_one_level() {
     left_click(&mut state, cancel.x + 1, cancel.y);
     assert!(state.overlay.is_none());
 }
+
+fn selected_description(state: &ClientShellState) -> String {
+    let entries = super::super::command_surface::command_catalog(
+        &state.config.keybinds.keybinds,
+        &state.config.keybinds.prefix,
+    );
+    let selected = command_overlay(state).selected;
+    entries
+        .get(selected)
+        .map(|entry| entry.description.clone())
+        .unwrap_or_default()
+}
+
+fn run_unique(state: &mut ClientShellState, query: &str) {
+    open_default(state);
+    state.handle_input_bytes(format!("/{query}\r").as_bytes());
+    assert!(state.overlay.is_none(), "{query} should run and close");
+}
+
+#[test]
+fn anticipate_highlights_the_usual_follower_until_the_manual_keys_change() {
+    let mut state = prepared();
+    state.config.command_surface_anticipate = true;
+    run_unique(&mut state, "split vertical");
+    run_unique(&mut state, "zoom pane");
+    run_unique(&mut state, "split vertical");
+
+    open_default(&mut state);
+    assert_eq!(selected_description(&state), "zoom pane");
+    let frame = state.compose(120, 40).expect("predicted");
+    let area = state.hits.help_popup;
+    let rows = super::frame_rows(&frame);
+    let highlighted: Vec<String> = (area.y..area.bottom())
+        .filter(|row| row_background(&frame, area.x + 1, *row) == state.config.palette.surface0)
+        .map(|row| rows[row as usize].clone())
+        .collect();
+    assert!(
+        highlighted.iter().any(|row| row.contains("zoom pane")),
+        "area={area:?} highlighted={highlighted:?}"
+    );
+    state.handle_input_bytes(b"\x1b");
+
+    state.handle_input_bytes(&[0x02]);
+    state.handle_input_bytes(b"b");
+    open_default(&mut state);
+    assert_eq!(command_overlay(&state).selected, 0);
+    assert_ne!(selected_description(&state), "zoom pane");
+}

@@ -70,9 +70,21 @@ pub(super) enum CommandSurfaceEffect {
 
 impl ClientShellState {
     pub(super) fn open_command_surface(&mut self) {
-        self.overlay = Some(ClientShellOverlay::CommandSurface(
-            ClientCommandSurfaceOverlay::new(),
-        ));
+        let mut overlay = ClientCommandSurfaceOverlay::new();
+        if self.config.command_surface_anticipate {
+            let context = self.surface_context();
+            if let Some(predicted) = self.command_anticipate.predict(&context) {
+                let entries =
+                    command_catalog(&self.config.keybinds.keybinds, &self.config.keybinds.prefix);
+                if let Some(index) = entries
+                    .iter()
+                    .position(|entry| predicted.matches_entry(entry))
+                {
+                    overlay.selected = index;
+                }
+            }
+        }
+        self.overlay = Some(ClientShellOverlay::CommandSurface(overlay));
     }
 }
 

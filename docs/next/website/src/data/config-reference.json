@@ -936,6 +936,12 @@
           "description": "Add Commands as the last item of workspace, tab, and pane right-click menus. On when omitted, including inside an existing [ui] table."
         },
         {
+          "key": "ui.command_surface_anticipate",
+          "type": "boolean",
+          "default": "false",
+          "description": "Highlight the command-surface row that usually follows the last choice in this workspace, tab, and pane. Off when omitted. It highlights only and does not run the row."
+        },
+        {
           "key": "ui.host_cursor",
           "type": "enum",
           "default": "auto",

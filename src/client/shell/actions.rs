@@ -6,6 +6,11 @@ impl ClientShellState {
         binding: crate::input::KeybindMatch,
         outcome: &mut ClientShellInput,
     ) {
+        if self.config.command_surface_anticipate && !self.command_surface_dispatching {
+            if let Some(token) = command_anticipate::manual_token(&binding) {
+                self.command_anticipate.note_manual(token);
+            }
+        }
         match binding {
             crate::input::KeybindMatch::Action(crate::input::KeybindAction::Detach) => {
                 outcome.detach = true;

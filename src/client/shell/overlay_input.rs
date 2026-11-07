@@ -520,11 +520,14 @@ impl ClientShellState {
         run: command_surface::CommandRun,
         outcome: &mut ClientShellInput,
     ) {
+        let choice = self.anticipated_choice();
         self.overlay = None;
-        match run {
-            command_surface::CommandRun::None | command_surface::CommandRun::Indexed(_) => {}
+        self.command_surface_dispatching = true;
+        let executed = match run {
+            command_surface::CommandRun::None | command_surface::CommandRun::Indexed(_) => false,
             command_surface::CommandRun::Action(action) => {
                 self.record_binding(crate::input::KeybindMatch::Action(action), outcome);
+                true
             }
             command_surface::CommandRun::Custom(index) => {
                 let Some(command) = self
@@ -535,13 +538,36 @@ impl ClientShellState {
                     .get(index)
                     .cloned()
                 else {
+                    self.command_surface_dispatching = false;
                     outcome.repaint = true;
                     return;
                 };
                 self.record_binding(crate::input::KeybindMatch::Command(command), outcome);
+                true
+            }
+        };
+        self.command_surface_dispatching = false;
+        if executed {
+            if let Some(choice) = choice {
+                let context = self.surface_context();
+                self.command_anticipate.note_choice(context, choice);
             }
         }
         outcome.repaint = true;
+    }
+
+    fn anticipated_choice(&self) -> Option<command_anticipate::ChoiceId> {
+        if !self.config.command_surface_anticipate {
+            return None;
+        }
+        let ClientShellOverlay::CommandSurface(overlay) = self.overlay.as_ref()? else {
+            return None;
+        };
+        let entries = command_surface::command_catalog(
+            &self.config.keybinds.keybinds,
+            &self.config.keybinds.prefix,
+        );
+        command_anticipate::selected_choice(overlay, &entries)
     }
 
     pub(super) fn route_overlay_key(

@@ -271,6 +271,9 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Add Commands as the last right-click item. On when omitted, including inside [ui].
 # command_surface_context_menu = true
 
+# Highlight the likely next command-surface row. Off unless set true.
+# command_surface_anticipate = false
+
 # Host cursor policy: "auto", "native", or "drawn".
 # "auto" draws Herdr's own cursor on native Windows builds and WSL to avoid ConPTY cursor flicker, and uses the native terminal cursor elsewhere.
 # "native" always uses the outer terminal cursor. "drawn" always draws Herdr's cursor as terminal cell content.

@@ -964,6 +964,8 @@ pub struct UiConfig {
     /// Stays on when this key is omitted, including inside an existing `[ui]` table.
     #[serde(default = "default_command_surface_context_menu")]
     pub command_surface_context_menu: bool,
+    /// Highlight the command-surface row that usually comes next. Default: false.
+    pub command_surface_anticipate: bool,
     /// Host cursor policy. Default: auto.
     pub host_cursor: HostCursorModeConfig,
     /// Modifier that lets right-click gestures pass through to pane apps. Empty disables it.
@@ -1221,6 +1223,7 @@ impl Default for UiConfig {
             copy_on_select: true,
             command_surface_replaces_help: false,
             command_surface_context_menu: true,
+            command_surface_anticipate: false,
             host_cursor: HostCursorModeConfig::Auto,
             right_click_passthrough_modifier: RightClickPassthroughModifierConfig::default(),
             redraw_on_focus_gained: true,
@@ -1771,6 +1774,7 @@ mouse_capture = false
         let default_config = Config::default();
         assert!(!default_config.ui.command_surface_replaces_help);
         assert!(default_config.ui.command_surface_context_menu);
+        assert!(!default_config.ui.command_surface_anticipate);
         assert_eq!(
             default_config.keys.command_surface,
             BindingConfig::one("prefix+/")
@@ -1779,6 +1783,7 @@ mouse_capture = false
         let empty: Config = toml::from_str("").unwrap();
         assert!(!empty.ui.command_surface_replaces_help);
         assert!(empty.ui.command_surface_context_menu);
+        assert!(!empty.ui.command_surface_anticipate);
 
         let partial: Config = toml::from_str(
             r#"
@@ -1789,17 +1794,20 @@ copy_on_select = true
         .unwrap();
         assert!(!partial.ui.command_surface_replaces_help);
         assert!(partial.ui.command_surface_context_menu);
+        assert!(!partial.ui.command_surface_anticipate);
 
         let explicit: Config = toml::from_str(
             r#"
 [ui]
 command_surface_replaces_help = true
 command_surface_context_menu = false
+command_surface_anticipate = true
 "#,
         )
         .unwrap();
         assert!(explicit.ui.command_surface_replaces_help);
         assert!(!explicit.ui.command_surface_context_menu);
+        assert!(explicit.ui.command_surface_anticipate);
 
         let keys: Config = toml::from_str(
             r#"
