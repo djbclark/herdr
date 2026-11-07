@@ -588,6 +588,13 @@ impl ClientShellState {
                     search_focused: true,
                     ..
                 }))
+                | Some(ClientShellOverlay::CommandSurface(
+                    ClientCommandSurfaceOverlay {
+                        search_focused: true,
+                        digit: None,
+                        ..
+                    }
+                ))
         )
     }
 

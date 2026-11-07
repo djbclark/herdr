@@ -130,6 +130,8 @@ impl ClientShellConfig {
             toast_delay_seconds: config.ui.toast.delay_seconds,
             toast_position: config.ui.toast.herdr.position,
             copy_on_select: config.ui.copy_on_select,
+            command_surface_replaces_help: config.ui.command_surface_replaces_help,
+            command_surface_context_menu: config.ui.command_surface_context_menu,
             clipboard_toast_enabled: config.ui.toast.clipboard.enabled,
             clipboard_toast_position: config.ui.toast.clipboard.position,
             theme_name: theme_runtime.manual_name.clone(),
@@ -357,6 +359,8 @@ impl ClientShellConfig {
                 self.toast_delay_seconds = ui.toast.delay_seconds;
                 self.toast_position = ui.toast.herdr.position;
                 self.copy_on_select = ui.copy_on_select;
+                self.command_surface_replaces_help = ui.command_surface_replaces_help;
+                self.command_surface_context_menu = ui.command_surface_context_menu;
                 self.clipboard_toast_enabled = ui.toast.clipboard.enabled;
                 self.clipboard_toast_position = ui.toast.clipboard.position;
                 self.prompt_new_tab_name = ui.prompt_new_tab_name;

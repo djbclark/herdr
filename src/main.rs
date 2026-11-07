@@ -145,6 +145,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 
 # Prefix-mode actions
 # help = "prefix+?"
+# command_surface = "prefix+/"
 # settings = "prefix+s"
 # detach = "prefix+q"
 # reload_config = "prefix+shift+r"
@@ -263,6 +264,12 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Set false to retain drag or double-click word selection until Ctrl+C,
 # or Cmd+C when the host forwards it, copies and clears it.
 # copy_on_select = true
+
+# Open the command surface instead of keybind help. Off unless set true.
+# command_surface_replaces_help = false
+
+# Add Commands as the last right-click item. On when omitted, including inside [ui].
+# command_surface_context_menu = true
 
 # Host cursor policy: "auto", "native", or "drawn".
 # "auto" draws Herdr's own cursor on native Windows builds and WSL to avoid ConPTY cursor flicker, and uses the native terminal cursor elsewhere.

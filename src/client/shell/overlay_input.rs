@@ -465,6 +465,14 @@ impl ClientShellState {
                 }
                 true
             }
+            Some(ClientShellOverlay::CommandSurface(surface))
+                if surface.search_focused && surface.digit.is_none() =>
+            {
+                if surface.query.insert(text) {
+                    surface.selected = 0;
+                }
+                true
+            }
             Some(ClientShellOverlay::Navigator(navigator)) if navigator.search_focused => {
                 if navigator.query.insert(text) {
                     navigator.filter = None;
@@ -474,6 +482,66 @@ impl ClientShellState {
             }
             _ => false,
         }
+    }
+
+    pub(super) fn route_command_surface_key(
+        &mut self,
+        key: &crate::input::TerminalKey,
+        outcome: &mut ClientShellInput,
+    ) {
+        if !matches!(self.overlay, Some(ClientShellOverlay::CommandSurface(_))) {
+            return;
+        }
+        let entries = command_surface::command_catalog(
+            &self.config.keybinds.keybinds,
+            &self.config.keybinds.prefix,
+        );
+        let viewport = self.hits.command_viewport_rows;
+        let width = self.hits.command_content_width;
+        let Some(ClientShellOverlay::CommandSurface(overlay)) = self.overlay.as_mut() else {
+            return;
+        };
+        let effect =
+            command_surface::handle_command_surface_key(overlay, &entries, key, viewport, width);
+        match effect {
+            command_surface::CommandSurfaceEffect::Redraw => outcome.repaint = true,
+            command_surface::CommandSurfaceEffect::Close => {
+                self.overlay = None;
+                outcome.repaint = true;
+            }
+            command_surface::CommandSurfaceEffect::Run(run) => {
+                self.dispatch_command_run(run, outcome);
+            }
+        }
+    }
+
+    fn dispatch_command_run(
+        &mut self,
+        run: command_surface::CommandRun,
+        outcome: &mut ClientShellInput,
+    ) {
+        self.overlay = None;
+        match run {
+            command_surface::CommandRun::None | command_surface::CommandRun::Indexed(_) => {}
+            command_surface::CommandRun::Action(action) => {
+                self.record_binding(crate::input::KeybindMatch::Action(action), outcome);
+            }
+            command_surface::CommandRun::Custom(index) => {
+                let Some(command) = self
+                    .config
+                    .keybinds
+                    .keybinds
+                    .custom_commands
+                    .get(index)
+                    .cloned()
+                else {
+                    outcome.repaint = true;
+                    return;
+                };
+                self.record_binding(crate::input::KeybindMatch::Command(command), outcome);
+            }
+        }
+        outcome.repaint = true;
     }
 
     pub(super) fn route_overlay_key(
@@ -885,6 +953,11 @@ impl ClientShellState {
                 _ => {}
             }
             outcome.repaint = true;
+            return;
+        }
+
+        if matches!(self.overlay, Some(ClientShellOverlay::CommandSurface(_))) {
+            self.route_command_surface_key(key, outcome);
             return;
         }
 

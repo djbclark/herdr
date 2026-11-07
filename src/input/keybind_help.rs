@@ -42,7 +42,7 @@ fn binding_label(bindings: &ActionKeybinds) -> String {
     bindings.label().unwrap_or_else(|| "unset".to_owned())
 }
 
-fn indexed_label(bindings: &[IndexedKeybind]) -> String {
+pub(crate) fn indexed_binding_label(bindings: &[IndexedKeybind]) -> String {
     if bindings.is_empty() {
         return "unset".to_owned();
     }
@@ -144,19 +144,25 @@ pub(crate) fn keybind_help_groups(
                 ),
                 entry(binding_label(&keybinds.next_workspace), "next workspace"),
                 entry(
-                    indexed_label(&keybinds.switch_workspace),
+                    indexed_binding_label(&keybinds.switch_workspace),
                     "switch workspace 1-9",
                 ),
                 entry(binding_label(&keybinds.previous_agent), "previous agent"),
                 entry(binding_label(&keybinds.next_agent), "next agent"),
-                entry(indexed_label(&keybinds.focus_agent), "focus agent 1-9"),
+                entry(
+                    indexed_binding_label(&keybinds.focus_agent),
+                    "focus agent 1-9",
+                ),
                 entry(binding_label(&keybinds.new_tab), "new tab"),
                 entry(binding_label(&keybinds.rename_tab), "rename tab"),
                 entry(binding_label(&keybinds.previous_tab), "previous tab"),
                 entry(binding_label(&keybinds.next_tab), "next tab"),
                 entry(binding_label(&keybinds.move_tab_previous), "move tab left"),
                 entry(binding_label(&keybinds.move_tab_next), "move tab right"),
-                entry(indexed_label(&keybinds.switch_tab), "switch tab 1-9"),
+                entry(
+                    indexed_binding_label(&keybinds.switch_tab),
+                    "switch tab 1-9",
+                ),
                 entry(binding_label(&keybinds.close_tab), "close tab"),
             ],
         ),

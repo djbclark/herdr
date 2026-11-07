@@ -5,7 +5,7 @@ impl ClientContextMenuOverlay {
         use ClientContextMenuAction as Action;
 
         let item = |label, action| ClientContextMenuItem { label, action };
-        match &self.target {
+        let mut items = match &self.target {
             ClientContextMenuTarget::Workspace { is_git: false, .. } => {
                 vec![item("Rename", Action::Rename), item("Close", Action::Close)]
             }
@@ -79,7 +79,11 @@ impl ClientContextMenuOverlay {
                 ]);
                 items
             }
+        };
+        if self.show_command_surface {
+            items.push(item("Commands", Action::Commands));
         }
+        items
     }
 }
 
@@ -120,6 +124,7 @@ impl ClientShellState {
             x,
             y,
             highlighted: 0,
+            show_command_surface: self.config.command_surface_context_menu,
         }));
     }
 
@@ -139,6 +144,7 @@ impl ClientShellState {
             x,
             y,
             highlighted: 0,
+            show_command_surface: self.config.command_surface_context_menu,
         }));
     }
 
@@ -164,6 +170,7 @@ impl ClientShellState {
             x,
             y,
             highlighted: 0,
+            show_command_surface: self.config.command_surface_context_menu,
         }));
     }
 
@@ -260,6 +267,10 @@ impl ClientShellState {
             ClientContextMenuAction::RemoveWorktree => {
                 self.begin_worktree_action_for(KeybindAction::RemoveWorktree, workspace_id, outcome)
             }
+            ClientContextMenuAction::Commands => {
+                self.open_command_surface();
+                outcome.repaint = true;
+            }
             ClientContextMenuAction::ToggleGroup => {
                 let key = self.snapshot.as_deref().and_then(|snapshot| {
                     snapshot
@@ -350,6 +361,10 @@ impl ClientShellState {
             }
             ClientContextMenuAction::Close => {
                 self.request_tab_close(tab_id, outcome);
+            }
+            ClientContextMenuAction::Commands => {
+                self.open_command_surface();
+                outcome.repaint = true;
             }
             _ => {}
         }
@@ -448,6 +463,10 @@ impl ClientShellState {
                 outcome,
             ),
             ClientContextMenuAction::ClosePane => self.request_pane_close(pane_id, outcome),
+            ClientContextMenuAction::Commands => {
+                self.open_command_surface();
+                outcome.repaint = true;
+            }
             _ => {}
         }
     }

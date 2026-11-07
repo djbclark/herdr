@@ -49,11 +49,20 @@ impl ClientShellState {
                     return;
                 }
                 if action == crate::input::KeybindAction::Help {
-                    self.overlay = Some(ClientShellOverlay::Help(ClientHelpOverlay {
-                        query: TextEditor::default(),
-                        search_focused: false,
-                        scroll: 0,
-                    }));
+                    if self.config.command_surface_replaces_help {
+                        self.open_command_surface();
+                    } else {
+                        self.overlay = Some(ClientShellOverlay::Help(ClientHelpOverlay {
+                            query: TextEditor::default(),
+                            search_focused: false,
+                            scroll: 0,
+                        }));
+                    }
+                    outcome.repaint = true;
+                    return;
+                }
+                if action == crate::input::KeybindAction::CommandSurface {
+                    self.open_command_surface();
                     outcome.repaint = true;
                     return;
                 }

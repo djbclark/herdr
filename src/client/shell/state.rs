@@ -30,6 +30,8 @@ pub(crate) struct ClientShellConfig {
     pub(super) toast_delay_seconds: u64,
     pub(super) toast_position: crate::config::ToastHerdrPosition,
     pub(super) copy_on_select: bool,
+    pub(super) command_surface_replaces_help: bool,
+    pub(super) command_surface_context_menu: bool,
     pub(super) clipboard_toast_enabled: bool,
     pub(super) clipboard_toast_position: crate::config::ToastClipboardPosition,
     pub(super) theme_name: String,
@@ -127,6 +129,8 @@ pub(super) struct ShellHitMap {
     pub(super) worktree_rows: Vec<(Rect, usize)>,
     pub(super) help_popup: Rect,
     pub(super) help_scrollbar: Rect,
+    pub(super) command_viewport_rows: usize,
+    pub(super) command_content_width: usize,
     pub(super) help_scroll_metrics: Option<crate::pane::ScrollMetrics>,
     pub(super) help_max_scroll: usize,
     pub(super) settings_popup: Rect,
@@ -284,6 +288,7 @@ pub(super) enum ClientShellOverlayKind {
     Rename,
     ConfirmClose,
     Help,
+    CommandSurface,
     Navigator,
     WorktreeCreate,
     WorktreeOpen,
@@ -374,6 +379,52 @@ pub(super) struct ClientHelpOverlay {
     pub(super) query: TextEditor,
     pub(super) search_focused: bool,
     pub(super) scroll: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum IndexedCommand {
+    SwitchTab,
+    SwitchWorkspace,
+    FocusAgent,
+}
+
+impl IndexedCommand {
+    pub(super) fn action(self, index: usize) -> crate::input::KeybindAction {
+        match self {
+            Self::SwitchTab => crate::input::KeybindAction::SwitchTab(index),
+            Self::SwitchWorkspace => crate::input::KeybindAction::SwitchWorkspace(index),
+            Self::FocusAgent => crate::input::KeybindAction::FocusAgent(index),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct ClientCommandDigitEntry {
+    pub(super) kind: IndexedCommand,
+    pub(super) buffer: String,
+}
+
+#[derive(Debug)]
+pub(super) struct ClientCommandSurfaceOverlay {
+    pub(super) query: TextEditor,
+    pub(super) search_focused: bool,
+    pub(super) filter: String,
+    pub(super) selected: usize,
+    pub(super) pending_g: bool,
+    pub(super) digit: Option<ClientCommandDigitEntry>,
+}
+
+impl ClientCommandSurfaceOverlay {
+    pub(super) fn new() -> Self {
+        Self {
+            query: TextEditor::default(),
+            search_focused: false,
+            filter: String::new(),
+            selected: 0,
+            pending_g: false,
+            digit: None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -525,6 +576,7 @@ pub(super) enum ClientContextMenuAction {
     Zoom,
     ToggleRightClickPassthrough,
     ClosePane,
+    Commands,
 }
 
 #[derive(Debug)]
@@ -556,6 +608,7 @@ pub(super) struct ClientContextMenuOverlay {
     pub(super) x: u16,
     pub(super) y: u16,
     pub(super) highlighted: usize,
+    pub(super) show_command_surface: bool,
 }
 
 pub(super) struct ClientContextMenuItem {
@@ -587,6 +640,7 @@ pub(super) enum ClientShellOverlay {
     Rename(ClientRenameOverlay),
     ConfirmClose(ClientConfirmCloseOverlay),
     Help(ClientHelpOverlay),
+    CommandSurface(ClientCommandSurfaceOverlay),
     Navigator(ClientNavigatorOverlay),
     WorktreeCreate(ClientWorktreeCreateOverlay),
     WorktreeOpen(ClientWorktreeOpenOverlay),
@@ -605,6 +659,7 @@ impl ClientShellOverlay {
             Self::Rename(_) => ClientShellOverlayKind::Rename,
             Self::ConfirmClose(_) => ClientShellOverlayKind::ConfirmClose,
             Self::Help(_) => ClientShellOverlayKind::Help,
+            Self::CommandSurface(_) => ClientShellOverlayKind::CommandSurface,
             Self::Navigator(_) => ClientShellOverlayKind::Navigator,
             Self::WorktreeCreate(_) => ClientShellOverlayKind::WorktreeCreate,
             Self::WorktreeOpen(_) => ClientShellOverlayKind::WorktreeOpen,

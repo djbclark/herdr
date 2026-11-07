@@ -1,5 +1,5 @@
 use super::*;
-use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 const SELECTION_AUTOSCROLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(30);
 const SELECTION_REPAINT_INTERVAL: std::time::Duration = std::time::Duration::from_millis(16);
@@ -1709,6 +1709,40 @@ impl ClientShellState {
                 MouseEventKind::ScrollDown => {
                     self.move_navigator_selection(3);
                     outcome.repaint = true;
+                }
+                _ => {}
+            }
+            return;
+        }
+        if matches!(self.overlay, Some(ClientShellOverlay::CommandSurface(_))) {
+            match mouse.kind {
+                MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
+                    if matches!(
+                        self.overlay,
+                        Some(ClientShellOverlay::CommandSurface(
+                            ClientCommandSurfaceOverlay { digit: None, .. }
+                        ))
+                    ) =>
+                {
+                    let code = if mouse.kind == MouseEventKind::ScrollUp {
+                        KeyCode::Up
+                    } else {
+                        KeyCode::Down
+                    };
+                    let key = crate::input::TerminalKey::new(code, KeyModifiers::empty());
+                    for _ in 0..3 {
+                        self.route_command_surface_key(&key, outcome);
+                    }
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if super::contains(self.hits.overlay_cancel, point) {
+                        let key =
+                            crate::input::TerminalKey::new(KeyCode::Esc, KeyModifiers::empty());
+                        self.route_command_surface_key(&key, outcome);
+                    } else if !super::contains(self.hits.help_popup, point) {
+                        self.overlay = None;
+                        outcome.repaint = true;
+                    }
                 }
                 _ => {}
             }

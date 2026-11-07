@@ -268,6 +268,7 @@ fn every_dialog_and_menu_occludes_its_panel_not_the_whole_screen() {
             search_focused: false,
             scroll: 0,
         }),
+        ClientShellOverlay::CommandSurface(ClientCommandSurfaceOverlay::new()),
         ClientShellOverlay::Navigator(ClientNavigatorOverlay {
             query: TextEditor::default(),
             search_focused: false,
@@ -307,6 +308,7 @@ fn every_dialog_and_menu_occludes_its_panel_not_the_whole_screen() {
             x: 35,
             y: 8,
             highlighted: 0,
+            show_command_surface: true,
         }),
         ClientShellOverlay::GlobalMenu(ClientGlobalMenuOverlay { highlighted: 0 }),
         ClientShellOverlay::Settings(ClientSettingsOverlay {
@@ -347,6 +349,7 @@ fn every_dialog_and_menu_occludes_its_panel_not_the_whole_screen() {
                 &state.active_endpoint_id,
                 &state.config.keybinds,
                 &state.config.palette,
+                layout.sidebar.width,
             ),
         }
         .unwrap();

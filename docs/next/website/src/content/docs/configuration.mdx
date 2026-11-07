@@ -151,7 +151,7 @@ prefix = ["ctrl+space", "ctrl+s"]
 
 Every configured prefix enters the same prefix mode and starts every `prefix+...` action. The first entry is the primary prefix shown in the status bar; the in-app help panel at `prefix+?` lists all of them.
 
-The default keymap is prefix-first so Herdr does not steal input from shells, editors, tmux, or terminal apps. Search `keys.` in the [Config reference](/docs/config-reference/) to see every action and default binding. The in-app help panel at `prefix+?` shows the active bindings.
+The default keymap is prefix-first so Herdr does not steal input from shells, editors, tmux, or terminal apps. Search `keys.` in the [Config reference](/docs/config-reference/) to see every action and default binding. The in-app help panel at `prefix+?` shows the active bindings. `ui.command_surface_replaces_help` defaults off and makes that binding open the command surface; `ui.command_surface_context_menu` defaults on, even when the key is omitted inside `[ui]`, and adds Commands as the last right-click item.
 
 A binding may also be an array when one action needs multiple shortcuts:
 

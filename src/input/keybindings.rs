@@ -65,6 +65,7 @@ pub(crate) enum KeybindAction {
     CyclePanePrevious,
     LastPane,
     Help,
+    CommandSurface,
     Settings,
     ReloadConfig,
     OpenNotificationTarget,
@@ -97,6 +98,7 @@ pub(crate) fn resolve_non_indexed_action(
 ) -> Option<KeybindAction> {
     for (bindings, action) in [
         (&keybinds.help, KeybindAction::Help),
+        (&keybinds.command_surface, KeybindAction::CommandSurface),
         (&keybinds.settings, KeybindAction::Settings),
         (&keybinds.workspace_picker, KeybindAction::WorkspacePicker),
         (&keybinds.new_workspace, KeybindAction::NewWorkspace),
@@ -311,6 +313,12 @@ mod tests {
         assert!(matches!(
             resolve_prefix_binding(&keybinds, &help),
             Some(KeybindMatch::Action(KeybindAction::Help))
+        ));
+
+        let surface = TerminalKey::new(KeyCode::Char('/'), KeyModifiers::empty());
+        assert!(matches!(
+            resolve_prefix_binding(&Keybinds::default(), &surface),
+            Some(KeybindMatch::Action(KeybindAction::CommandSurface))
         ));
 
         let one = TerminalKey::new(KeyCode::Char('1'), KeyModifiers::empty());

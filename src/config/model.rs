@@ -339,6 +339,8 @@ pub struct KeysConfig {
     pub prefix: BindingConfig,
     /// Open keybinding help. Default: "prefix+?"
     pub help: BindingConfig,
+    /// Open the command surface. Default: "prefix+/".
+    pub command_surface: BindingConfig,
     /// Open settings. Default: "prefix+s"
     pub settings: BindingConfig,
     /// Create a new workspace. Default: "prefix+shift+n"
@@ -476,6 +478,8 @@ pub(crate) struct KeysConfigOverlay {
     extra_prefixes: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     help: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    command_surface: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     settings: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -645,6 +649,7 @@ impl<'de> Deserialize<'de> for KeysConfig {
         }
 
         apply_field!(help);
+        apply_field!(command_surface);
         apply_field!(settings);
         apply_field!(new_workspace);
         apply_field!(new_worktree);
@@ -750,6 +755,7 @@ impl KeysConfig {
 
         profile.prefix = Some(self.prefix.clone());
         copy_effective_action_field!(help, keybinds.help);
+        copy_effective_action_field!(command_surface, keybinds.command_surface);
         copy_effective_action_field!(settings, keybinds.settings);
         copy_effective_action_field!(new_workspace, keybinds.new_workspace);
         copy_effective_action_field!(new_worktree, keybinds.new_worktree);
@@ -952,6 +958,12 @@ pub struct UiConfig {
     pub mouse_capture: bool,
     /// Copy text selected with the mouse. Default: true.
     pub copy_on_select: bool,
+    /// Open the command surface instead of keybind help. Default: false.
+    pub command_surface_replaces_help: bool,
+    /// Add the command surface as the last right-click menu item.
+    /// Stays on when this key is omitted, including inside an existing `[ui]` table.
+    #[serde(default = "default_command_surface_context_menu")]
+    pub command_surface_context_menu: bool,
     /// Host cursor policy. Default: auto.
     pub host_cursor: HostCursorModeConfig,
     /// Modifier that lets right-click gestures pass through to pane apps. Empty disables it.
@@ -1122,6 +1134,7 @@ impl Default for KeysConfig {
         Self {
             prefix: BindingConfig::one("ctrl+b"),
             help: BindingConfig::one("prefix+?"),
+            command_surface: BindingConfig::one("prefix+/"),
             settings: BindingConfig::one("prefix+s"),
             new_workspace: BindingConfig::one("prefix+shift+n"),
             new_worktree: BindingConfig::one("prefix+shift+g"),
@@ -1206,6 +1219,8 @@ impl Default for UiConfig {
             mobile_width_threshold: DEFAULT_MOBILE_WIDTH_THRESHOLD,
             mouse_capture: true,
             copy_on_select: true,
+            command_surface_replaces_help: false,
+            command_surface_context_menu: true,
             host_cursor: HostCursorModeConfig::Auto,
             right_click_passthrough_modifier: RightClickPassthroughModifierConfig::default(),
             redraw_on_focus_gained: true,
@@ -1232,6 +1247,10 @@ impl Default for UiConfig {
             sound: SoundConfig::default(),
         }
     }
+}
+
+fn default_command_surface_context_menu() -> bool {
+    true
 }
 
 impl UiConfig {
@@ -1745,6 +1764,51 @@ mouse_capture = false
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(!config.ui.mouse_capture);
+    }
+
+    #[test]
+    fn command_surface_flags_default_when_omitted_and_parse() {
+        let default_config = Config::default();
+        assert!(!default_config.ui.command_surface_replaces_help);
+        assert!(default_config.ui.command_surface_context_menu);
+        assert_eq!(
+            default_config.keys.command_surface,
+            BindingConfig::one("prefix+/")
+        );
+
+        let empty: Config = toml::from_str("").unwrap();
+        assert!(!empty.ui.command_surface_replaces_help);
+        assert!(empty.ui.command_surface_context_menu);
+
+        let partial: Config = toml::from_str(
+            r#"
+[ui]
+copy_on_select = true
+"#,
+        )
+        .unwrap();
+        assert!(!partial.ui.command_surface_replaces_help);
+        assert!(partial.ui.command_surface_context_menu);
+
+        let explicit: Config = toml::from_str(
+            r#"
+[ui]
+command_surface_replaces_help = true
+command_surface_context_menu = false
+"#,
+        )
+        .unwrap();
+        assert!(explicit.ui.command_surface_replaces_help);
+        assert!(!explicit.ui.command_surface_context_menu);
+
+        let keys: Config = toml::from_str(
+            r#"
+[keys]
+command_surface = "ctrl+p"
+"#,
+        )
+        .unwrap();
+        assert_eq!(keys.keys.command_surface, BindingConfig::one("ctrl+p"));
     }
 
     #[test]

@@ -19,6 +19,8 @@ pub(crate) struct OverlayRender {
     pub(crate) worktree_rows: Vec<(Rect, usize)>,
     pub(crate) help_popup: Rect,
     pub(crate) help_scrollbar: Rect,
+    pub(crate) command_viewport_rows: usize,
+    pub(crate) command_content_width: usize,
     pub(crate) help_scroll_metrics: Option<crate::pane::ScrollMetrics>,
     pub(crate) help_max_scroll: usize,
     pub(crate) settings_popup: Rect,
@@ -41,6 +43,7 @@ pub(crate) fn render_client_overlay(
     active_endpoint_id: &ClientEndpointId,
     k: &LiveKeybindConfig,
     p: &Palette,
+    sidebar_width: u16,
 ) -> Option<OverlayRender> {
     if !matches!(
         o,
@@ -64,6 +67,7 @@ pub(crate) fn render_client_overlay(
         ClientShellOverlay::Rename(v) => render_rename_overlay(b, v, p),
         ClientShellOverlay::ConfirmClose(v) => render_confirm_close_overlay(b, v, p),
         ClientShellOverlay::Help(v) => render_help_overlay(b, v, k, p),
+        ClientShellOverlay::CommandSurface(v) => render_command_surface(b, v, k, p, sidebar_width),
         ClientShellOverlay::Navigator(v) => {
             render_navigator_overlay(b, v, endpoints, active_endpoint_id, p)
         }
@@ -1253,6 +1257,287 @@ fn render_help_overlay(
         ..OverlayRender::default()
     })
 }
+fn render_command_surface(
+    buffer: &mut Buffer,
+    overlay: &ClientCommandSurfaceOverlay,
+    keybinds: &LiveKeybindConfig,
+    palette: &Palette,
+    sidebar_width: u16,
+) -> Option<OverlayRender> {
+    use super::super::command_surface::{
+        command_catalog, command_surface_rect, command_view, shortcut_pad, SurfaceLine,
+    };
+
+    let rect = command_surface_rect(buffer.area, sidebar_width)?;
+    let inner = panel(buffer, rect, palette.accent, palette.panel_bg)?;
+    if inner.width < 20 || inner.height < 6 {
+        return None;
+    }
+    let body = Rect::new(
+        inner.x,
+        inner.y + 3,
+        inner.width,
+        inner.height.saturating_sub(5),
+    );
+    let content_width = usize::from(body.width);
+    let viewport = usize::from(body.height);
+    let query = if overlay.search_focused {
+        overlay.query.as_str()
+    } else {
+        overlay.filter.as_str()
+    };
+    let entries = command_catalog(&keybinds.keybinds, &keybinds.prefix);
+    let view = command_view(&entries, query, overlay.selected, content_width, viewport);
+    let pad = shortcut_pad(&view.lines);
+    put_text(
+        buffer,
+        inner.x,
+        inner.y,
+        inner.width.saturating_sub(13),
+        &format!(" {}", view.group),
+        Style::default()
+            .fg(palette.accent)
+            .bg(palette.panel_bg)
+            .add_modifier(Modifier::BOLD),
+    );
+    let close = Rect::new(inner.right() - 13, inner.y, 13, 1);
+    let back = overlay.digit.is_some() || overlay.search_focused || !overlay.filter.is_empty();
+    button(
+        buffer,
+        close,
+        if back { " esc back " } else { " esc close " },
+        Style::default()
+            .fg(contrast(palette))
+            .bg(palette.accent)
+            .add_modifier(Modifier::BOLD),
+    );
+    let search_y = inner.y + 1;
+    let search_label = if overlay.search_focused {
+        " / ".to_owned()
+    } else if overlay.filter.is_empty() {
+        " / press / to filter by command or shortcut".to_owned()
+    } else {
+        format!(" / {}", overlay.filter)
+    };
+    put_text(
+        buffer,
+        inner.x,
+        search_y,
+        inner.width,
+        &search_label,
+        Style::default()
+            .fg(if overlay.search_focused {
+                palette.text
+            } else {
+                palette.overlay0
+            })
+            .bg(palette.panel_bg),
+    );
+    let cursor = if overlay.search_focused && overlay.digit.is_none() {
+        text_editor::render(
+            buffer,
+            Rect::new(inner.x + 3, search_y, inner.width.saturating_sub(3), 1),
+            &overlay.query,
+            Style::default().fg(palette.text).bg(palette.panel_bg),
+        )
+    } else {
+        None
+    };
+    if view.lines.is_empty() {
+        put_text(
+            buffer,
+            body.x,
+            body.y,
+            body.width,
+            " no matching commands",
+            Style::default().fg(palette.overlay1).bg(palette.panel_bg),
+        );
+    }
+    for (index, line) in view
+        .lines
+        .iter()
+        .enumerate()
+        .skip(view.scroll)
+        .take(viewport)
+    {
+        let row = (index - view.scroll) as u16;
+        let y = body.y.saturating_add(row);
+        if y >= body.bottom() {
+            break;
+        }
+        let highlighted = view.highlight_row == Some(usize::from(row));
+        let background = if highlighted {
+            palette.surface0
+        } else {
+            palette.panel_bg
+        };
+        if highlighted {
+            buffer.set_style(
+                Rect::new(body.x, y, body.width, 1),
+                Style::default().bg(background),
+            );
+        }
+        let shortcut_style = Style::default()
+            .fg(palette.mauve)
+            .bg(background)
+            .add_modifier(Modifier::BOLD);
+        let description_style = Style::default().fg(palette.text).bg(background);
+        let title_style = Style::default()
+            .fg(palette.accent)
+            .bg(background)
+            .add_modifier(Modifier::BOLD);
+        match line {
+            SurfaceLine::Title(group) => {
+                put_text(
+                    buffer,
+                    body.x,
+                    y,
+                    body.width,
+                    &format!(" {group}"),
+                    title_style,
+                );
+            }
+            SurfaceLine::Blank => {}
+            SurfaceLine::Full {
+                shortcut,
+                description,
+                ..
+            } => {
+                let key = format!(" {shortcut:<pad$} ");
+                let key_width = u16::try_from(key.chars().count()).unwrap_or(u16::MAX);
+                put_text(
+                    buffer,
+                    body.x,
+                    y,
+                    key_width.min(body.width),
+                    &key,
+                    shortcut_style,
+                );
+                let rest = body.width.saturating_sub(key_width);
+                if rest > 0 {
+                    put_text(
+                        buffer,
+                        body.x.saturating_add(key_width),
+                        y,
+                        rest,
+                        description,
+                        description_style,
+                    );
+                }
+            }
+            SurfaceLine::Shortcut { text, .. } | SurfaceLine::Continuation { text } => {
+                put_text(
+                    buffer,
+                    body.x,
+                    y,
+                    body.width,
+                    &format!(" {text}"),
+                    shortcut_style,
+                );
+            }
+            SurfaceLine::Description { text } => {
+                put_text(
+                    buffer,
+                    body.x,
+                    y,
+                    body.width,
+                    &format!(" {text}"),
+                    description_style,
+                );
+            }
+        }
+    }
+    let footer = if overlay.digit.is_some() {
+        " index 1-99 · enter run · backspace edit · esc cancel "
+    } else if overlay.search_focused {
+        " edit ←→/home/end · kill ^u/^k · yank ^y · run enter · back esc"
+    } else {
+        " search / · scroll j/k/↑↓/pgup/pgdn · run enter · close esc"
+    };
+    put_text(
+        buffer,
+        inner.x,
+        inner.bottom() - 1,
+        inner.width,
+        footer,
+        Style::default().fg(palette.overlay0).bg(palette.panel_bg),
+    );
+    let cancel = overlay
+        .digit
+        .as_ref()
+        .and_then(|digit| render_command_digit_dialog(buffer, digit, palette))
+        .unwrap_or(close);
+    Some(OverlayRender {
+        area: rect,
+        cancel,
+        help_popup: rect,
+        command_viewport_rows: viewport,
+        command_content_width: content_width,
+        cursor,
+        ..OverlayRender::default()
+    })
+}
+
+fn render_command_digit_dialog(
+    buffer: &mut Buffer,
+    digit: &ClientCommandDigitEntry,
+    palette: &Palette,
+) -> Option<Rect> {
+    let outer = popup(buffer.area, 48, 8)?;
+    let inner = panel(buffer, outer, palette.accent, palette.panel_bg)?;
+    let title = match digit.kind {
+        IndexedCommand::SwitchTab => "switch tab",
+        IndexedCommand::SwitchWorkspace => "switch workspace",
+        IndexedCommand::FocusAgent => "focus agent",
+    };
+    put_text(
+        buffer,
+        inner.x,
+        inner.y,
+        inner.width.saturating_sub(13),
+        &format!(" {title}"),
+        Style::default()
+            .fg(palette.accent)
+            .bg(palette.panel_bg)
+            .add_modifier(Modifier::BOLD),
+    );
+    let close = Rect::new(inner.right().saturating_sub(13), inner.y, 13, 1);
+    button(
+        buffer,
+        close,
+        " esc cancel ",
+        Style::default()
+            .fg(contrast(palette))
+            .bg(palette.accent)
+            .add_modifier(Modifier::BOLD),
+    );
+    put_text(
+        buffer,
+        inner.x,
+        inner.y + 2,
+        inner.width,
+        " type an index from 1 to 99",
+        Style::default().fg(palette.text).bg(palette.panel_bg),
+    );
+    let shown = if digit.buffer.is_empty() {
+        " _".to_owned()
+    } else {
+        format!(" {}", digit.buffer)
+    };
+    put_text(
+        buffer,
+        inner.x,
+        inner.y + 3,
+        inner.width,
+        &shown,
+        Style::default()
+            .fg(palette.mauve)
+            .bg(palette.panel_bg)
+            .add_modifier(Modifier::BOLD),
+    );
+    Some(close)
+}
+
 fn render_confirm_close_overlay(
     b: &mut Buffer,
     c: &ClientConfirmCloseOverlay,

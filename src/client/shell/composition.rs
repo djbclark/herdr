@@ -670,6 +670,7 @@ impl ClientShellState {
                     &self.active_endpoint_id,
                     &self.config.keybinds,
                     &self.config.palette,
+                    layout.sidebar.width,
                 )?;
                 occlusion.cover(rendered.area);
                 self.hits.overlay_primary = rendered.primary;
@@ -684,6 +685,8 @@ impl ClientShellState {
                 self.hits.worktree_rows = rendered.worktree_rows;
                 self.hits.help_popup = rendered.help_popup;
                 self.hits.help_scrollbar = rendered.help_scrollbar;
+                self.hits.command_viewport_rows = rendered.command_viewport_rows;
+                self.hits.command_content_width = rendered.command_content_width;
                 self.hits.help_scroll_metrics = rendered.help_scroll_metrics;
                 self.hits.help_max_scroll = rendered.help_max_scroll;
                 self.hits.settings_popup = rendered.settings_popup;

@@ -494,6 +494,12 @@
           "description": "Open keybinding help."
         },
         {
+          "key": "keys.command_surface",
+          "type": "keybinding",
+          "default": "\"prefix+/\"",
+          "description": "Open the command surface. Default: prefix+/."
+        },
+        {
           "key": "keys.settings",
           "type": "keybinding",
           "default": "\"prefix+s\"",
@@ -916,6 +922,18 @@
           "type": "boolean",
           "default": "true",
           "description": "Automatically copy text selected by mouse drag or double-click. When disabled, Ctrl+C or a host-forwarded Cmd+C copies and clears the retained selection."
+        },
+        {
+          "key": "ui.command_surface_replaces_help",
+          "type": "boolean",
+          "default": "false",
+          "description": "Open the command surface from the keybind-help binding. Off when omitted."
+        },
+        {
+          "key": "ui.command_surface_context_menu",
+          "type": "boolean",
+          "default": "true",
+          "description": "Add Commands as the last item of workspace, tab, and pane right-click menus. On when omitted, including inside an existing [ui] table."
         },
         {
           "key": "ui.host_cursor",
