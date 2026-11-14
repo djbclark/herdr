@@ -72,14 +72,14 @@ This repository is a fork of [herdrdev/herdr](https://github.com/herdrdev/herdr)
 
 ### Local branches of interest
 
-1. [`command-surface`](https://github.com/djbclark/herdr/tree/command-surface) — fork-only command-surface experiments.
-2. [`herdr-sleeper`](https://github.com/djbclark/herdr/tree/herdr-sleeper) — standalone sleeper script path later reborn as the [herdr-sleeper](https://github.com/djbclark/herdr-sleeper) plugin.
+1. [`command-surface`](https://github.com/frdminc/herdr/tree/command-surface) — fork-only command-surface experiments.
+2. [`herdr-sleeper`](https://github.com/frdminc/herdr/tree/herdr-sleeper) — standalone sleeper script path later reborn as the [herdr-sleeper](https://github.com/frdminc/herdr-sleeper) plugin.
 
 ### Upstream discussion posts
 
-1. [Discussion 5861](https://github.com/herdrdev/herdr/discussions/5861) — plain-English command line ([herdr-plain-line](https://github.com/djbclark/herdr-plain-line) plugin).
+1. [Discussion 5861](https://github.com/herdrdev/herdr/discussions/5861) — plain-English command line ([herdr-plain-line](https://github.com/frdminc/herdr-plain-line) plugin).
 2. [Discussion 2283 comment](https://github.com/herdrdev/herdr/discussions/2283#discussioncomment-19459084) — related naming / surface notes.
-3. [Discussion 631](https://github.com/herdrdev/herdr/discussions/631) — agent sleep / hibernate ([herdr-sleeper](https://github.com/djbclark/herdr-sleeper)).
+3. [Discussion 631](https://github.com/herdrdev/herdr/discussions/631) — agent sleep / hibernate ([herdr-sleeper](https://github.com/frdminc/herdr-sleeper)).
 4. [Discussion 1674](https://github.com/herdrdev/herdr/discussions/1674) — native destination-picker ideas.
 
 
@@ -87,10 +87,10 @@ This repository is a fork of [herdrdev/herdr](https://github.com/herdrdev/herdr)
 
 | Repo | Role |
 | --- | --- |
-| [djbclark/herdr](https://github.com/djbclark/herdr) | Fork of [herdrdev/herdr](https://github.com/herdrdev/herdr) |
-| [herdr-plain-line](https://github.com/djbclark/herdr-plain-line) | Local plugin: plain-English popup for tab/workspace rename and create |
-| [herdr-sleeper](https://github.com/djbclark/herdr-sleeper) | Plugin: sleep idle agent panes, wake later |
-| [herdr4paseo](https://github.com/djbclark/herdr4paseo) | Terminal UI to watch/steer a Paseo agent from a pane |
+| [frdminc/herdr](https://github.com/frdminc/herdr) | Fork of [herdrdev/herdr](https://github.com/herdrdev/herdr) |
+| [herdr-plain-line](https://github.com/frdminc/herdr-plain-line) | Local plugin: plain-English popup for tab/workspace rename and create |
+| [herdr-sleeper](https://github.com/frdminc/herdr-sleeper) | Plugin: sleep idle agent panes, wake later |
+| [herdr4paseo](https://github.com/frdminc/herdr4paseo) | Terminal UI to watch/steer a Paseo agent from a pane |
 | [paseo4herdr](https://github.com/djbclark/paseo4herdr) | Paseo plugin mirroring OMP agents that run in Herdr |
 
 
